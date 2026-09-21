@@ -16,11 +16,14 @@ import {
   setWifi,
 } from "@fixo/mcp-network";
 import {
+  backupJobs,
   checkAppInstalled,
+  installAppCascade,
   installFromPlay,
+  listCatalogApps,
   openPlayListing,
   resolvePackageId,
-  backupPhoneMediaAndContacts,
+  upsertCatalogApp,
 } from "@fixo/mcp-apps";
 
 export type ChatMessage = {
@@ -344,6 +347,39 @@ export async function handleChat(input: {
         });
       },
     }),
+    list_catalog_apps: tool({
+      description: "List apps in the local Fixo catalog.",
+      parameters: z.object({}),
+      execute: async () => {
+        const apps = await listCatalogApps();
+        return toolJson({ ok: true, apps });
+      },
+    }),
+    add_catalog_app: tool({
+      description: "Add or update an app in the local catalog (label, packageId, optional APK/GitHub/URL).",
+      parameters: z.object({
+        label: z.string(),
+        packageId: z.string(),
+        localApkPath: z.string().optional(),
+        githubRepo: z.string().optional(),
+        apkUrl: z.string().optional(),
+        play: z.boolean().optional(),
+      }),
+      execute: async (args) => {
+        const app = await upsertCatalogApp({
+          id: "",
+          label: args.label,
+          packageId: args.packageId,
+          sources: {
+            play: args.play ?? true,
+            localApkPath: args.localApkPath,
+            githubRepo: args.githubRepo,
+            apkUrl: args.apkUrl,
+          },
+        });
+        return toolJson({ ok: true, app, message: `${app.label} ذخیره شد` });
+      },
+    }),
     open_play_listing: tool({
       description: "Open Google Play listing for an app on the phone.",
       parameters: z.object({
@@ -366,7 +402,7 @@ export async function handleChat(input: {
     }),
     install_from_play: tool({
       description:
-        "Install an app from Google Play immediately (no confirmation). Opens listing, taps Install/نصب when possible, waits until installed. Phone needs Play login + internet.",
+        "Install only from Google Play (no cascade). Prefer install_app for normal shop installs.",
       parameters: z.object({
         packageId: z.string().describe("e.g. com.whatsapp or whatsapp"),
         deviceSerial: z.string().optional(),
@@ -384,9 +420,45 @@ export async function handleChat(input: {
         });
       },
     }),
+    install_app: tool({
+      description:
+        "Install an app with cascade (Play → local APK → GitHub → URL). Use source=auto unless technician named a source. No Fixo confirmation after they chose source in UI; when chatting, default source=auto. Ask verbally if Play account is ready only if unclear.",
+      parameters: z.object({
+        packageId: z.string(),
+        source: z.enum(["auto", "play", "local_apk", "github", "url"]).default("auto"),
+        fallback: z.boolean().default(true),
+        localApkPath: z.string().optional(),
+        githubRepo: z.string().optional(),
+        apkUrl: z.string().optional(),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async (args) => {
+        const resolved = resolvePackageId(args.packageId);
+        const { serial, evidence } = await resolveSerial(
+          input.adb,
+          args.deviceSerial ?? input.deviceSerial,
+        );
+        const result = await installAppCascade(input.adb, serial, resolved.packageId, {
+          source: args.source,
+          fallback: args.fallback,
+          localApkPath: args.localApkPath,
+          githubRepo: args.githubRepo,
+          apkUrl: args.apkUrl,
+        });
+        return toolJson({
+          ok: result.installed,
+          deviceSerial: serial,
+          ...result,
+          evidence: [...evidence, ...result.evidence],
+          message: result.installed
+            ? `${result.packageId} از ${result.usedSource} نصب شد`
+            : `نصب ${result.packageId} کامل نشد`,
+        });
+      },
+    }),
     backup_phone: tool({
       description:
-        "Backup photos, videos, and contacts from the phone to a Desktop/Fixo-Backups folder named after the phone. Runs immediately when technician asks.",
+        "Start phone backup (photos/videos/contacts) as a job. Returns jobId; progress continues in background.",
       parameters: z.object({
         deviceSerial: z.string().optional(),
       }),
@@ -395,23 +467,44 @@ export async function handleChat(input: {
           input.adb,
           deviceSerial ?? input.deviceSerial,
         );
-        const result = await backupPhoneMediaAndContacts(input.adb, serial);
+        const job = backupJobs.start(input.adb, serial);
         return toolJson({
           ok: true,
           deviceSerial: serial,
-          ...result,
-          evidence: [...evidence, ...result.evidence],
-          message: `بک‌آپ در ${result.folder} ذخیره شد`,
+          job,
+          evidence,
+          message: `بک‌آپ شروع شد (${job.jobId})`,
         });
+      },
+    }),
+    backup_control: tool({
+      description: "Pause, resume, cancel, or read status of a backup job.",
+      parameters: z.object({
+        jobId: z.string(),
+        action: z.enum(["status", "pause", "resume", "cancel"]),
+      }),
+      execute: async ({ jobId, action }) => {
+        let job =
+          action === "pause"
+            ? backupJobs.pause(jobId)
+            : action === "resume"
+              ? backupJobs.resume(jobId)
+              : action === "cancel"
+                ? backupJobs.cancel(jobId)
+                : backupJobs.get(jobId);
+        if (!job) return toolJson({ ok: false, message: "job پیدا نشد" });
+        return toolJson({ ok: true, job });
       },
     }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, open_play_listing, install_from_play, backup_phone.
+مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
-اگر گفت اپی را نصب کن، فوراً install_from_play را بدون تأیید اضافه صدا بزن (واتساپ/اینستا/تلگرام/وی‌توباکس).
-اگر گفت بک‌آپ بگیر / عکس و فیلم و مخاطبین را بردار، از backup_phone استفاده کن.
+اگر گفت اپی را نصب کن: اگر منبع نگفت از install_app با source=auto و fallback=true استفاده کن (Play→APK محلی→GitHub→URL). اگر گفت فقط پلی / فقط APK / از گیت‌هاب، همان source را بگذار و fallback را روشن بگذار مگر صریحاً بگوید فقط همان.
+قبل از نصب اگر معلوم نیست، یک جمله بپرس: «اکانت پلی آماده‌ست؟» — بعد نصب را اجرا کن؛ تأیید اضافی Fixo لازم نیست.
+اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت ننویس.`;
 
   let messages = input.messages.map((m) => ({

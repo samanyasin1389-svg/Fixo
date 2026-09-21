@@ -312,19 +312,156 @@ app.post("/api/apps/install-play", async (req, res) => {
   }
 });
 
+app.get("/api/apps/catalog", async (_req, res) => {
+  try {
+    const { listCatalogApps, INSTALL_SOURCE_OPTIONS, catalogFilePath } =
+      await import("@fixo/mcp-apps");
+    const apps = await listCatalogApps();
+    res.json({
+      ok: true,
+      apps,
+      sources: INSTALL_SOURCE_OPTIONS,
+      catalogPath: catalogFilePath(),
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/apps/catalog", async (req, res) => {
+  try {
+    const body = req.body ?? {};
+    const packageId = String(body.packageId ?? "").trim();
+    const label = String(body.label ?? "").trim();
+    if (!packageId || !label) {
+      res.status(400).json({ ok: false, message: "label و packageId لازم است" });
+      return;
+    }
+    const { upsertCatalogApp } = await import("@fixo/mcp-apps");
+    const app = await upsertCatalogApp({
+      id: typeof body.id === "string" ? body.id : "",
+      label,
+      packageId,
+      pinned: Boolean(body.pinned),
+      sources: {
+        play: body.play !== false,
+        localApkPath: typeof body.localApkPath === "string" ? body.localApkPath : undefined,
+        githubRepo: typeof body.githubRepo === "string" ? body.githubRepo : undefined,
+        apkUrl: typeof body.apkUrl === "string" ? body.apkUrl : undefined,
+      },
+    });
+    res.json({ ok: true, app, message: `${app.label} به کاتالوگ اضافه شد` });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/apps/install", async (req, res) => {
+  try {
+    const packageId = String(req.body?.packageId ?? "");
+    if (!packageId) {
+      res.status(400).json({ ok: false, message: "packageId required" });
+      return;
+    }
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const { installAppCascade } = await import("@fixo/mcp-apps");
+    const source = req.body?.source;
+    const result = await installAppCascade(adb, serial, packageId, {
+      source:
+        source === "play" ||
+        source === "local_apk" ||
+        source === "github" ||
+        source === "url" ||
+        source === "auto"
+          ? source
+          : "auto",
+      fallback: req.body?.fallback !== false,
+      localApkPath:
+        typeof req.body?.localApkPath === "string" ? req.body.localApkPath : undefined,
+      githubRepo: typeof req.body?.githubRepo === "string" ? req.body.githubRepo : undefined,
+      apkUrl: typeof req.body?.apkUrl === "string" ? req.body.apkUrl : undefined,
+      timeoutMs: Number(req.body?.timeoutMs) || 90_000,
+    });
+    res.json({
+      ok: result.installed,
+      deviceSerial: serial,
+      ...result,
+      message: result.installed
+        ? `${result.packageId} از ${result.usedSource ?? "cascade"} نصب شد`
+        : `نصب ${result.packageId} ناموفق بود`,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/backup", async (req, res) => {
   try {
     const serialParam =
       typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
     const { serial } = await resolveSerial(adb, serialParam);
-    const { backupPhoneMediaAndContacts } = await import("@fixo/mcp-apps");
-    const result = await backupPhoneMediaAndContacts(adb, serial);
+    const { backupJobs } = await import("@fixo/mcp-apps");
+    const progress = backupJobs.start(adb, serial);
     res.json({
       ok: true,
       deviceSerial: serial,
-      ...result,
-      message: `بک‌آپ ذخیره شد: ${result.folder}`,
+      job: progress,
+      message: "بک‌آپ شروع شد",
     });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.get("/api/backup/:jobId", async (req, res) => {
+  try {
+    const { backupJobs } = await import("@fixo/mcp-apps");
+    const job = backupJobs.get(String(req.params.jobId));
+    if (!job) {
+      res.status(404).json({ ok: false, message: "job پیدا نشد" });
+      return;
+    }
+    res.json({ ok: true, job });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/backup/:jobId/:action", async (req, res) => {
+  try {
+    const action = String(req.params.action);
+    const jobId = String(req.params.jobId);
+    const { backupJobs } = await import("@fixo/mcp-apps");
+    let job = null;
+    if (action === "pause") job = backupJobs.pause(jobId);
+    else if (action === "resume") job = backupJobs.resume(jobId);
+    else if (action === "cancel") job = backupJobs.cancel(jobId);
+    else {
+      res.status(400).json({ ok: false, message: "action باید pause|resume|cancel باشد" });
+      return;
+    }
+    if (!job) {
+      res.status(404).json({ ok: false, message: "job پیدا نشد" });
+      return;
+    }
+    res.json({ ok: true, job });
   } catch (err) {
     res.status(500).json({
       ok: false,

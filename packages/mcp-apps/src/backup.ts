@@ -36,7 +36,6 @@ async function adbPull(
     timeoutMs: 600_000,
   });
   const evidence = `adb -s ${serial} pull ${remote} ${local}\nexit=${result.code}\nstdout=${result.stdout.trim()}\nstderr=${result.stderr.trim()}`;
-  // adb pull returns 1 if remote missing; treat as soft miss
   const missing = /does not exist|No such file|error:\s*remote object/i.test(
     result.stdout + result.stderr,
   );
@@ -48,10 +47,39 @@ async function remoteExists(adb: AdbRunner, serial: string, remote: string) {
   return /YES/.test(check.stdout);
 }
 
-export async function backupPhoneMediaAndContacts(
-  adb: AdbRunner,
-  serial: string,
-): Promise<{
+export type BackupPhase =
+  | "starting"
+  | "media"
+  | "contacts"
+  | "paused"
+  | "cancelling"
+  | "done"
+  | "cancelled"
+  | "error";
+
+export type BackupProgress = {
+  jobId: string;
+  deviceSerial: string;
+  phase: BackupPhase;
+  folder?: string;
+  phoneName?: string;
+  currentTarget?: string;
+  completedSteps: number;
+  totalSteps: number;
+  percent: number;
+  message: string;
+  pulled: string[];
+  skipped: string[];
+  contactsCount?: number;
+  error?: string;
+};
+
+type BackupControls = {
+  paused: boolean;
+  cancelled: boolean;
+};
+
+export type BackupResult = {
   folder: string;
   phoneName: string;
   pulled: string[];
@@ -59,7 +87,43 @@ export async function backupPhoneMediaAndContacts(
   contactsFile?: string;
   contactsCount: number;
   evidence: string[];
-}> {
+  cancelled?: boolean;
+};
+
+const MEDIA_TARGETS = [
+  { remote: "/sdcard/DCIM", localName: "DCIM" },
+  { remote: "/sdcard/Pictures", localName: "Pictures" },
+  { remote: "/sdcard/Movies", localName: "Movies" },
+  { remote: "/sdcard/Video", localName: "Video" },
+  { remote: "/sdcard/Videos", localName: "Videos" },
+  { remote: "/sdcard/Download", localName: "Download" },
+  { remote: "/storage/emulated/0/DCIM", localName: "DCIM_emulated" },
+  { remote: "/storage/emulated/0/Pictures", localName: "Pictures_emulated" },
+  { remote: "/storage/emulated/0/Movies", localName: "Movies_emulated" },
+] as const;
+
+async function waitWhilePaused(controls: BackupControls, onPause?: () => void) {
+  let announced = false;
+  while (controls.paused && !controls.cancelled) {
+    if (!announced) {
+      onPause?.();
+      announced = true;
+    }
+    await sleep(250);
+  }
+}
+
+export async function backupPhoneMediaAndContacts(
+  adb: AdbRunner,
+  serial: string,
+  options?: {
+    controls?: BackupControls;
+    onProgress?: (progress: Omit<BackupProgress, "jobId" | "deviceSerial"> & {
+      phase: BackupPhase;
+    }) => void;
+  },
+): Promise<BackupResult> {
+  const controls = options?.controls ?? { paused: false, cancelled: false };
   const evidence: string[] = [];
   const info = await getDeviceInfo(adb, serial);
   const phoneName =
@@ -70,26 +134,54 @@ export async function backupPhoneMediaAndContacts(
   await fs.mkdir(folder, { recursive: true });
   evidence.push(`backup folder=${folder}`);
 
-  const mediaTargets = [
-    { remote: "/sdcard/DCIM", localName: "DCIM" },
-    { remote: "/sdcard/Pictures", localName: "Pictures" },
-    { remote: "/sdcard/Movies", localName: "Movies" },
-    { remote: "/sdcard/Video", localName: "Video" },
-    { remote: "/sdcard/Videos", localName: "Videos" },
-    { remote: "/sdcard/Download", localName: "Download" },
-    { remote: "/storage/emulated/0/DCIM", localName: "DCIM_emulated" },
-    { remote: "/storage/emulated/0/Pictures", localName: "Pictures_emulated" },
-    { remote: "/storage/emulated/0/Movies", localName: "Movies_emulated" },
-  ];
-
+  const totalSteps = MEDIA_TARGETS.length + 1; // media + contacts
+  let completedSteps = 0;
   const pulled: string[] = [];
   const skipped: string[] = [];
 
-  for (const target of mediaTargets) {
+  const emit = (
+    phase: BackupPhase,
+    message: string,
+    extra?: Partial<BackupProgress>,
+  ) => {
+    options?.onProgress?.({
+      phase,
+      folder,
+      phoneName,
+      completedSteps,
+      totalSteps,
+      percent: Math.min(100, Math.round((completedSteps / totalSteps) * 100)),
+      message,
+      pulled: [...pulled],
+      skipped: [...skipped],
+      ...extra,
+    });
+  };
+
+  emit("starting", "شروع بک‌آپ…");
+
+  for (const target of MEDIA_TARGETS) {
+    await waitWhilePaused(controls, () => emit("paused", "بک‌آپ متوقف موقت"));
+    if (controls.cancelled) {
+      emit("cancelled", "بک‌آپ لغو شد");
+      return {
+        folder,
+        phoneName,
+        pulled,
+        skipped,
+        contactsCount: 0,
+        evidence,
+        cancelled: true,
+      };
+    }
+
+    emit("media", `در حال کپی ${target.localName}`, { currentTarget: target.remote });
     const exists = await remoteExists(adb, serial, target.remote);
     evidence.push(`exists ${target.remote}=${exists}`);
     if (!exists) {
       skipped.push(target.remote);
+      completedSteps += 1;
+      emit("media", `رد شد: ${target.localName}`, { currentTarget: target.remote });
       continue;
     }
     const local = path.join(folder, target.localName);
@@ -97,13 +189,28 @@ export async function backupPhoneMediaAndContacts(
     evidence.push(result.evidence);
     if (result.ok) pulled.push(target.remote);
     else skipped.push(target.remote);
+    completedSteps += 1;
   }
 
-  // Contacts via content provider → CSV
+  await waitWhilePaused(controls, () => emit("paused", "بک‌آپ متوقف موقت"));
+  if (controls.cancelled) {
+    emit("cancelled", "بک‌آپ لغو شد");
+    return {
+      folder,
+      phoneName,
+      pulled,
+      skipped,
+      contactsCount: 0,
+      evidence,
+      cancelled: true,
+    };
+  }
+
+  emit("contacts", "در حال گرفتن مخاطبین…", { currentTarget: "contacts" });
   const contactsQuery = await shell(
     adb,
     serial,
-    'content query --uri content://com.android.contacts/data --projection mimetype:display_name:data1:data2:data3:data4',
+    "content query --uri content://com.android.contacts/data --projection mimetype:display_name:data1:data2:data3:data4",
     60_000,
   );
   evidence.push(contactsQuery.evidence);
@@ -118,7 +225,6 @@ export async function backupPhoneMediaAndContacts(
   ].join("\n");
   await fs.writeFile(contactsFile, csv, "utf8");
 
-  // Also write a simple VCF for phone numbers
   const vcfFile = path.join(folder, "contacts.vcf");
   const phoneRows = rows.filter((r) => /phone/i.test(r.mimetype) && r.data);
   const vcf = phoneRows
@@ -129,6 +235,7 @@ export async function backupPhoneMediaAndContacts(
     .join("\n");
   await fs.writeFile(vcfFile, vcf || "", "utf8");
 
+  const contactsCount = phoneRows.length || rows.length;
   await fs.writeFile(
     path.join(folder, "backup-info.json"),
     JSON.stringify(
@@ -141,7 +248,7 @@ export async function backupPhoneMediaAndContacts(
         createdAt: new Date().toISOString(),
         pulled,
         skipped,
-        contactsCount: phoneRows.length || rows.length,
+        contactsCount,
       },
       null,
       2,
@@ -149,24 +256,126 @@ export async function backupPhoneMediaAndContacts(
     "utf8",
   );
 
+  completedSteps += 1;
+
   if (pulled.length === 0 && rows.length === 0) {
+    emit("error", "رسانه یا مخاطبی خوانده نشد");
     throw new AdbError(
       "Backup finished but no media folders or contacts were readable. Check USB file permission / MTP access on the phone.",
       evidence,
     );
   }
 
-  await sleep(100);
+  emit("done", `بک‌آپ آماده است (${contactsCount} مخاطب)`, { contactsCount });
+  await sleep(50);
   return {
     folder,
     phoneName,
     pulled,
     skipped,
     contactsFile,
-    contactsCount: phoneRows.length || rows.length,
+    contactsCount,
     evidence,
   };
 }
+
+type JobRecord = {
+  progress: BackupProgress;
+  controls: BackupControls;
+  promise: Promise<BackupResult>;
+};
+
+export class BackupJobManager {
+  private jobs = new Map<string, JobRecord>();
+  private counter = 0;
+
+  start(adb: AdbRunner, serial: string): BackupProgress {
+    const jobId = `bak_${Date.now()}_${++this.counter}`;
+    const controls: BackupControls = { paused: false, cancelled: false };
+    const progress: BackupProgress = {
+      jobId,
+      deviceSerial: serial,
+      phase: "starting",
+      completedSteps: 0,
+      totalSteps: MEDIA_TARGETS.length + 1,
+      percent: 0,
+      message: "شروع بک‌آپ…",
+      pulled: [],
+      skipped: [],
+    };
+
+    const promise = backupPhoneMediaAndContacts(adb, serial, {
+      controls,
+      onProgress: (p) => {
+        Object.assign(progress, p, { jobId, deviceSerial: serial });
+      },
+    })
+      .then((result) => {
+        if (result.cancelled) {
+          progress.phase = "cancelled";
+          progress.message = "بک‌آپ لغو شد";
+        } else {
+          progress.phase = "done";
+          progress.percent = 100;
+          progress.folder = result.folder;
+          progress.contactsCount = result.contactsCount;
+          progress.message = `بک‌آپ آماده است (${result.contactsCount} مخاطب)`;
+        }
+        return result;
+      })
+      .catch((err) => {
+        progress.phase = "error";
+        progress.error = err instanceof Error ? err.message : String(err);
+        progress.message = progress.error;
+        throw err;
+      });
+
+    this.jobs.set(jobId, { progress, controls, promise });
+    return { ...progress };
+  }
+
+  get(jobId: string): BackupProgress | null {
+    const job = this.jobs.get(jobId);
+    return job ? { ...job.progress } : null;
+  }
+
+  list(): BackupProgress[] {
+    return [...this.jobs.values()].map((j) => ({ ...j.progress }));
+  }
+
+  pause(jobId: string): BackupProgress | null {
+    const job = this.jobs.get(jobId);
+    if (!job) return null;
+    if (job.progress.phase === "done" || job.progress.phase === "cancelled") return { ...job.progress };
+    job.controls.paused = true;
+    job.progress.phase = "paused";
+    job.progress.message = "بک‌آپ متوقف موقت";
+    return { ...job.progress };
+  }
+
+  resume(jobId: string): BackupProgress | null {
+    const job = this.jobs.get(jobId);
+    if (!job) return null;
+    job.controls.paused = false;
+    if (job.progress.phase === "paused") {
+      job.progress.phase = "media";
+      job.progress.message = "ادامه بک‌آپ…";
+    }
+    return { ...job.progress };
+  }
+
+  cancel(jobId: string): BackupProgress | null {
+    const job = this.jobs.get(jobId);
+    if (!job) return null;
+    job.controls.cancelled = true;
+    job.controls.paused = false;
+    job.progress.phase = "cancelling";
+    job.progress.message = "در حال لغو…";
+    return { ...job.progress };
+  }
+}
+
+export const backupJobs = new BackupJobManager();
 
 function parseContactsDump(stdout: string) {
   const rows: Array<{ name: string; data: string; mimetype: string }> = [];
@@ -176,7 +385,6 @@ function parseContactsDump(stdout: string) {
     const name = pick(line, "display_name") || "";
     const data1 = pick(line, "data1") || "";
     if (!data1 && !name) continue;
-    // Prefer phone/email rows
     if (
       /vnd\.android\.cursor\.item\/phone/i.test(mimetype) ||
       /vnd\.android\.cursor\.item\/email/i.test(mimetype) ||

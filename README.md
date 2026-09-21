@@ -74,9 +74,14 @@ pnpm --filter @fixo/mcp-network dev
 | `resolve_play_app` | تبدیل نام/alias به packageId |
 | `check_app_installed` | چک نصب بودن اپ |
 | `open_play_listing` | باز کردن صفحه اپ در Play |
-| `install_from_play` | نصب از Play (تأیید + UIAutomator) |
+| `install_from_play` | نصب فقط از Play |
+| `install_app` | نصب با زنجیره Play→APK محلی→GitHub→URL |
+| `list_catalog_apps` / `add_catalog_app` | کاتالوگ محلی اپ‌ها |
+| `start_backup` | شروع بک‌آپ کنترل‌پذیر |
 
 وای‌فای مغازه از UI یا Agent با تنظیمات محلی (`~/.config/fixo/settings.json` یا `SHOP_WIFI_*` در `.env`) کار می‌کند.
+
+کاتالوگ اپ‌ها در `~/.config/fixo/apps-catalog.json` ذخیره می‌شود. در UI قبل از نصب، اکانت پلی و منبع نصب (خودکار / پلی / APK / گیت‌هاب) پرسیده می‌شود؛ بعد زنجیره با fallback جلو می‌رود. بک‌آپ pause/resume/cancel دارد.
 
 ### بک‌آپ
 دکمه **بک‌آپ گرفتن** یا چت: عکس/فیلم/مخاطبین را در `~/Desktop/Fixo-Backups/<نام‌گوشی>_<زمان>/` ذخیره می‌کند.
