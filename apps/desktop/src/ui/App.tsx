@@ -47,6 +47,7 @@ export function App() {
   const [autoBlocker, setAutoBlocker] = useState<string | null>(null);
   const [appQuery, setAppQuery] = useState("whatsapp");
   const [appMsg, setAppMsg] = useState<string | null>(null);
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
