@@ -94,14 +94,16 @@ export async function handleChat(input: {
     }),
     set_wifi: tool({
       description:
-        "Turn Wi-Fi on or off. Always call first with confirmed=false unless the technician already confirmed.",
+        "Turn Wi-Fi on or off. When enabling, also connects to shop Wi-Fi (nibero). When user asks to turn Wi-Fi on, call with confirmed=true.",
       parameters: z.object({
         enabled: z.boolean(),
         confirmed: z.boolean().default(false),
         deviceSerial: z.string().optional(),
       }),
       execute: async ({ enabled, confirmed, deviceSerial }) => {
-        const label = enabled ? "روشن کردن Wi-Fi" : "خاموش کردن Wi-Fi";
+        const label = enabled
+          ? `روشن کردن Wi-Fi و وصل به ${input.shopWifi.ssid}`
+          : "خاموش کردن Wi-Fi";
         const serialHint = deviceSerial ?? input.deviceSerial;
         if (!confirmed && !input.confirmAction) {
           pendingAction = { tool: "set_wifi", enabled, deviceSerial: serialHint, label };
@@ -115,11 +117,40 @@ export async function handleChat(input: {
         assertConfirmed(true, label);
         const { serial, evidence: e0 } = await resolveSerial(input.adb, serialHint);
         const before = await getNetworkStatus(input.adb, serial);
-        const change = await setWifi(input.adb, serial, enabled);
+
+        if (enabled) {
+          if (!input.shopWifi.password) {
+            return toolJson({
+              ok: false,
+              status: "missing_password",
+              message: "رمز وای‌فای مغازه در تنظیمات ست نشده است.",
+            });
+          }
+          const result = await connectWifi(
+            input.adb,
+            serial,
+            input.shopWifi.ssid,
+            input.shopWifi.password,
+          );
+          const after = await getNetworkStatus(input.adb, serial);
+          return toolJson({
+            ok: result.connected,
+            deviceSerial: serial,
+            strategy: result.strategy,
+            before: before.status,
+            after: after.status,
+            message: result.connected
+              ? `Wi-Fi on and connected to ${result.wifiSsid ?? input.shopWifi.ssid}`
+              : `Wi-Fi enable/connect attempted to ${input.shopWifi.ssid}`,
+            evidence: [...e0, ...before.evidence, ...result.evidence, ...after.evidence],
+          });
+        }
+
+        const change = await setWifi(input.adb, serial, false);
         await sleep(800);
         const after = await getNetworkStatus(input.adb, serial);
         return toolJson({
-          ok: after.status.wifiEnabled === enabled || after.status.wifiEnabled === null,
+          ok: after.status.wifiEnabled === false || after.status.wifiEnabled === null,
           deviceSerial: serial,
           before: before.status,
           after: after.status,
@@ -287,9 +318,10 @@ export async function handleChat(input: {
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
 ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi.
-وای‌فای مغازه: SSID=${input.shopWifi.ssid}. اگر گفت به اینترنت شرکت/مغازه/nibero وصل کن از connect_shop_wifi استفاده کن.
+مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ این کار علاوه بر روشن کردن، به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌کند.
+اتصال خودکار با وصل کابل نداریم؛ فقط وقتی کاربر بگوید.
 اگر گفت شبکه مغازه را فراموش کن از forget_shop_wifi استفاده کن.
-قبل از تغییر، وضعیت را بخوان. برای تغییر اول confirmed=false؛ بعد از تأیید confirmed=true.
+قبل از تغییر مخرب تأیید بگیر؛ برای روشن کردن وای‌فای وقتی کاربر صریح گفته، می‌توانی confirmed=true بزنی.
 جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت در جواب ننویس.`;
 
   let messages = input.messages.map((m) => ({

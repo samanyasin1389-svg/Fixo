@@ -40,7 +40,7 @@ export function App() {
   } | null>(null);
   const [shopSsid, setShopSsid] = useState("nibero");
   const [shopPassword, setShopPassword] = useState("");
-  const [autoShopWifi, setAutoShopWifi] = useState(true);
+  const [autoShopWifi, setAutoShopWifi] = useState(false);
   const [autoSessions, setAutoSessions] = useState<
     Array<{ usbSerial: string; phase: string; message: string; wirelessSerial?: string }>
   >([]);
@@ -129,25 +129,6 @@ export function App() {
     setShopPassword("");
     setSettingsMsg("تنظیمات وای‌فای مغازه ذخیره شد.");
     await refresh();
-  }
-
-  async function runAutoNow() {
-    setBusy(true);
-    setError(null);
-    setActionMsg(null);
-    try {
-      const res = await fetch("/api/auto-wifi/run", { method: "POST" });
-      const data = await res.json();
-      setAutoSessions(data.sessions ?? []);
-      setAutoBlocker(data.blocker ?? null);
-      if (data.blocker) setError(data.blocker);
-      else setActionMsg(data.sessions?.[0]?.message ?? "اجرای خودکار شروع شد");
-      await refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
   }
 
   async function shopWifi(action: "connect" | "forget") {
@@ -317,7 +298,7 @@ export function App() {
 
           <div className="actions" style={{ marginTop: 16 }}>
             <button type="button" disabled={busy} onClick={() => void toggleWifi(true)}>
-              Wi‑Fi روشن
+              Wi‑Fi روشن + nibero
             </button>
             <button
               type="button"
@@ -332,36 +313,21 @@ export function App() {
             </button>
           </div>
 
-          <h2 style={{ marginTop: 22 }}>وای‌فای مغازه (خودکار)</h2>
+          <h2 style={{ marginTop: 22 }}>وای‌فای مغازه</h2>
           <p className="muted">
-            با وصل کابل: Wi‑Fi روشن + وصل به {health?.shopWifiSsid || shopSsid}. با قطع کابل:
-            فراموش شبکه (از طریق ADB بی‌سیم).
+            وقتی Wi‑Fi را روشن کنی (دکمه یا چت)، به {health?.shopWifiSsid || shopSsid} وصل
+            می‌شود. اتصال خودکار با کابل خاموش است.
           </p>
-          <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}>
-            <input
-              type="checkbox"
-              checked={autoShopWifi}
-              onChange={(e) => setAutoShopWifi(e.target.checked)}
-            />
-            اتصال/فراموشی خودکار فعال باشد
-          </label>
-          {autoBlocker ? <p className="error">{autoBlocker}</p> : null}
-          {autoSessions[0] ? (
+          {autoBlocker && autoShopWifi ? <p className="error">{autoBlocker}</p> : null}
+          {autoShopWifi && autoSessions[0] ? (
             <p className="muted" style={{ marginTop: 8 }}>
-              وضعیت: {autoSessions[0].phase} — {autoSessions[0].message}
+              وضعیت خودکار: {autoSessions[0].phase} — {autoSessions[0].message}
             </p>
-          ) : (
-            <p className="muted" style={{ marginTop: 8 }}>
-              هنوز نشست خودکاری نیست. گوشی را وصل کن یا «اجرای خودکار الان» را بزن.
-            </p>
-          )}
+          ) : null}
 
           <div className="actions" style={{ marginTop: 10 }}>
-            <button type="button" disabled={busy} onClick={() => void runAutoNow()}>
-              اجرای خودکار الان
-            </button>
             <button type="button" disabled={busy} onClick={() => void shopWifi("connect")}>
-              وصل دستی
+              فقط وصل به مغازه
             </button>
             <button
               type="button"
@@ -369,12 +335,20 @@ export function App() {
               disabled={busy}
               onClick={() => void shopWifi("forget")}
             >
-              فراموش دستی
+              فراموش کردن شبکه
             </button>
           </div>
           {actionMsg ? <p className="muted">{actionMsg}</p> : null}
 
           <h2 style={{ marginTop: 22 }}>تنظیمات برنامه</h2>
+          <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
+            <input
+              type="checkbox"
+              checked={autoShopWifi}
+              onChange={(e) => setAutoShopWifi(e.target.checked)}
+            />
+            اتصال خودکار با وصل/قطع کابل (معمولاً خاموش بماند)
+          </label>
           <label className="muted" htmlFor="ssid">
             SSID مغازه
           </label>

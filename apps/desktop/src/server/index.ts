@@ -24,7 +24,10 @@ dotenv.config();
 const PORT = Number(process.env.PORT ?? 8787);
 const adb = createSystemAdb();
 const autoWifi = new ShopWifiAutoManager(adb);
-autoWifi.start(2000);
+// Auto USB plug/unplug is OFF by default; only start if explicitly enabled in settings/env.
+void loadSettings().then((s) => {
+  if (s.autoShopWifi === true) autoWifi.start(2000);
+});
 
 const app = express();
 app.use(cors());
@@ -38,7 +41,7 @@ app.get("/api/health", async (_req, res) => {
     model: process.env.OPENAI_MODEL ?? settings.openaiModel ?? "gpt-4.1",
     shopWifiSsid: settings.shopWifiSsid,
     hasShopWifiPassword: Boolean(settings.shopWifiPassword),
-    autoShopWifi: settings.autoShopWifi !== false,
+    autoShopWifi: settings.autoShopWifi === true,
   });
 });
 
@@ -115,10 +118,49 @@ app.post("/api/network/wifi", async (req, res) => {
     const serialParam =
       typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
     const { serial } = await resolveSerial(adb, serialParam);
-    await setWifi(adb, serial, enabled);
+    const settings = await loadSettings();
+    const evidence: string[] = [];
+
+    if (enabled) {
+      if (!settings.shopWifiPassword) {
+        res.status(400).json({
+          ok: false,
+          message:
+            "رمز وای‌فای مغازه ست نشده. در تنظیمات یا .env مقدار SHOP_WIFI_PASSWORD را بگذار.",
+        });
+        return;
+      }
+      const result = await connectWifi(
+        adb,
+        serial,
+        settings.shopWifiSsid,
+        settings.shopWifiPassword,
+      );
+      evidence.push(...result.evidence);
+      const { status } = await getNetworkStatus(adb, serial);
+      res.json({
+        ok: result.connected,
+        deviceSerial: serial,
+        status,
+        evidence,
+        strategy: result.strategy,
+        message: result.connected
+          ? `Wi‑Fi روشن شد و به ${result.wifiSsid ?? settings.shopWifiSsid} وصل شد`
+          : `Wi‑Fi روشن شد ولی وصل به ${settings.shopWifiSsid} نامشخص است`,
+      });
+      return;
+    }
+
+    await setWifi(adb, serial, false);
     await new Promise((r) => setTimeout(r, 800));
-    const { status, evidence } = await getNetworkStatus(adb, serial);
-    res.json({ ok: true, deviceSerial: serial, status, evidence });
+    const { status, evidence: e2 } = await getNetworkStatus(adb, serial);
+    res.json({
+      ok: true,
+      deviceSerial: serial,
+      status,
+      evidence: e2,
+      message: "Wi‑Fi خاموش شد",
+    });
   } catch (err) {
     res.status(500).json({
       ok: false,
