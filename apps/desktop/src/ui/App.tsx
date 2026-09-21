@@ -150,6 +150,7 @@ export function App() {
     }
   }
 
+  async function shopWifi(action: "connect" | "forget") {
     setBusy(true);
     setActionMsg(null);
     setError(null);
