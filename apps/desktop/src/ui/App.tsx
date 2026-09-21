@@ -1,4 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import {
+  SOURCE_IDS,
+  dirFor,
+  sourceLabel,
+  t,
+  type Locale,
+  type Theme,
+} from "./i18n";
 
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
@@ -25,13 +33,7 @@ type CatalogApp = {
   pinned?: boolean;
 };
 
-type InstallSource =
-  | "auto"
-  | "play"
-  | "model_search"
-  | "local_apk"
-  | "github"
-  | "url";
+type InstallSource = (typeof SOURCE_IDS)[number];
 
 type BackupJob = {
   jobId: string;
@@ -43,15 +45,6 @@ type BackupJob = {
   currentTarget?: string;
 };
 
-const SOURCE_OPTIONS_ALL: Array<{ id: InstallSource; label: string }> = [
-  { id: "auto", label: "خودکار (پیشنهادی)" },
-  { id: "play", label: "گوگل پلی" },
-  { id: "model_search", label: "جستجوی مدل‌محور" },
-  { id: "local_apk", label: "فایل APK روی لپ‌تاپ" },
-  { id: "github", label: "گیت‌هاب" },
-  { id: "url", label: "لینک مستقیم" },
-];
-
 function pillClass(v: boolean | null) {
   if (v === null) return "pill unknown";
   return v ? "pill on" : "pill off";
@@ -62,7 +55,16 @@ function pillLabel(v: boolean | null) {
   return v ? "ON" : "OFF";
 }
 
+function applyDocumentChrome(theme: Theme, locale: Locale) {
+  const root = document.documentElement;
+  root.setAttribute("data-theme", theme);
+  root.setAttribute("lang", locale);
+  root.setAttribute("dir", dirFor(locale));
+}
+
 export function App() {
+  const [theme, setTheme] = useState<Theme>("night");
+  const [locale, setLocale] = useState<Locale>("fa");
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceSerial, setDeviceSerial] = useState("");
   const [network, setNetwork] = useState<NetworkStatus | null>(null);
@@ -93,12 +95,8 @@ export function App() {
   const [pendingPackages, setPendingPackages] = useState<CatalogApp[]>([]);
   const [installSource, setInstallSource] = useState<InstallSource>("auto");
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
-  const [messages, setMessages] = useState<Msg[]>([
-    {
-      role: "assistant",
-      content: "سلام. وای‌فای مغازه، نصب برنامه، یا بک‌آپ گوشی را بگو.",
-    },
-  ]);
+  const [messages, setMessages] = useState<Msg[]>([]);
+  const [welcomeSet, setWelcomeSet] = useState(false);
   const [input, setInput] = useState("");
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
@@ -110,6 +108,36 @@ export function App() {
     () => deviceSerial || devices.find((d) => d.status === "device")?.serial || "",
     [deviceSerial, devices],
   );
+
+  const phoneConnected = useMemo(
+    () => devices.some((d) => d.status === "device"),
+    [devices],
+  );
+
+  const visibleSources = useMemo(() => {
+    const ids = playReady
+      ? SOURCE_IDS
+      : SOURCE_IDS.filter((id) => id !== "play");
+    return ids.map((id) => ({ id, label: sourceLabel(locale, id) }));
+  }, [playReady, locale]);
+
+  useEffect(() => {
+    applyDocumentChrome(theme, locale);
+  }, [theme, locale]);
+
+  useEffect(() => {
+    if (!welcomeSet) {
+      setMessages([{ role: "assistant", content: t(locale, "welcome") }]);
+      setWelcomeSet(true);
+      return;
+    }
+    setMessages((prev) => {
+      if (prev.length === 1 && prev[0]?.role === "assistant") {
+        return [{ role: "assistant", content: t(locale, "welcome") }];
+      }
+      return prev;
+    });
+  }, [locale, welcomeSet]);
 
   async function loadCatalog() {
     try {
@@ -129,9 +157,17 @@ export function App() {
         fetch("/api/settings").then((r) => r.json()),
       ]);
       setHealth(h);
-      if (s.ok && s.settings?.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
+      if (s.ok && s.settings) {
+        if (s.settings.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
+        if (s.settings.theme === "day" || s.settings.theme === "night") {
+          setTheme(s.settings.theme);
+        }
+        if (s.settings.locale === "fa" || s.settings.locale === "en") {
+          setLocale(s.settings.locale);
+        }
+      }
       if (d.ok) setDevices(d.devices ?? []);
-      else setError(d.message ?? "خطا در خواندن دستگاه‌ها");
+      else setError(d.message ?? t(locale, "devicesError"));
 
       const serial =
         deviceSerial ||
@@ -170,6 +206,30 @@ export function App() {
     return () => clearInterval(id);
   }, [backupJob?.jobId, backupJob?.phase]);
 
+  async function persistPrefs(patch: { theme?: Theme; locale?: Locale }) {
+    try {
+      await fetch("/api/settings", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(patch),
+      });
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function changeTheme(next: Theme) {
+    setTheme(next);
+    applyDocumentChrome(next, locale);
+    await persistPrefs({ theme: next });
+  }
+
+  async function changeLocale(next: Locale) {
+    setLocale(next);
+    applyDocumentChrome(theme, next);
+    await persistPrefs({ locale: next });
+  }
+
   async function saveShopSettings() {
     setSettingsMsg(null);
     const res = await fetch("/api/settings", {
@@ -182,11 +242,11 @@ export function App() {
     });
     const data = await res.json();
     if (!data.ok) {
-      setSettingsMsg(data.message ?? "خطا در ذخیره");
+      setSettingsMsg(data.message ?? "Error");
       return;
     }
     setShopPassword("");
-    setSettingsMsg("ذخیره شد.");
+    setSettingsMsg(t(locale, "saved"));
     await refresh();
   }
 
@@ -201,9 +261,9 @@ export function App() {
         body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "ناموفق");
+      if (!data.ok) setError(data.message ?? "Failed");
       else {
-        setActionMsg(data.message ?? "انجام شد");
+        setActionMsg(data.message ?? "OK");
         if (data.after) setNetwork(data.after);
       }
       await refresh();
@@ -229,14 +289,6 @@ export function App() {
     setInstallSource("auto");
     setInstallStep("source");
   }
-
-  const visibleSources = useMemo(
-    () =>
-      playReady
-        ? SOURCE_OPTIONS_ALL
-        : SOURCE_OPTIONS_ALL.filter((o) => o.id !== "play"),
-    [playReady],
-  );
 
   function toggleAppSelect(packageId: string) {
     setSelectedApps((prev) =>
@@ -270,12 +322,12 @@ export function App() {
         });
         const data = await res.json();
         if (data.browserOpened && !data.installed) {
-          notes.push(`${app.label}: جستجو باز شد — APK را دانلود کنید`);
+          notes.push(`${app.label}: ${t(locale, "searchOpened")}`);
         } else {
           notes.push(
             data.installed
-              ? `${app.label}: نصب شد (${data.usedSource ?? source})`
-              : `${app.label}: ${data.message ?? "ناموفق"}`,
+              ? `${app.label}: OK (${data.usedSource ?? source})`
+              : `${app.label}: ${data.message ?? "Failed"}`,
           );
         }
       }
@@ -291,7 +343,7 @@ export function App() {
 
   async function addCatalogApp() {
     if (!newApp.label.trim() || !newApp.packageId.trim()) {
-      setError("نام و packageId لازم است");
+      setError(t(locale, "needLabelPackage"));
       return;
     }
     setBusy(true);
@@ -310,9 +362,9 @@ export function App() {
         }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "افزودن ناموفق");
+      if (!data.ok) setError(data.message ?? "Failed");
       else {
-        setAppMsg(data.message ?? "اضافه شد");
+        setAppMsg(data.message ?? t(locale, "saved"));
         setNewApp({ label: "", packageId: "", localApkPath: "", githubRepo: "", apkUrl: "" });
         setShowAddApp(false);
         await loadCatalog();
@@ -335,10 +387,10 @@ export function App() {
         body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "بک‌آپ ناموفق");
+      if (!data.ok) setError(data.message ?? "Failed");
       else {
         setBackupJob(data.job);
-        setAppMsg("بک‌آپ شروع شد");
+        setAppMsg(t(locale, "backupStarted"));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -371,10 +423,10 @@ export function App() {
         }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "خطا");
+      if (!data.ok) setError(data.message ?? "Error");
       else {
         if (data.status) setNetwork(data.status);
-        setActionMsg(data.message ?? (enabled ? "Wi‑Fi روشن شد" : "Wi‑Fi خاموش شد"));
+        setActionMsg(data.message ?? (enabled ? "Wi‑Fi ON" : "Wi‑Fi OFF"));
       }
       await refresh();
     } catch (err) {
@@ -412,7 +464,7 @@ export function App() {
       });
       const data = await res.json();
       if (!data.ok) {
-        setError(data.message ?? "خطای چت");
+        setError(data.message ?? "Chat error");
         return;
       }
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "" }]);
@@ -430,25 +482,64 @@ export function App() {
   return (
     <div className="app">
       <header className="brand">
-        <h1>Fixo</h1>
-        <p>همراه تعمیرکار؛ شبکه مغازه، نصب اپ و بک‌آپ گوشی مشتری.</p>
+        <div className="brand-top">
+          <h1>Fixo</h1>
+          <div className="toolbar">
+            <span className={phoneConnected ? "connect-badge on" : "connect-badge off"}>
+              {phoneConnected ? t(locale, "connected") : t(locale, "disconnected")}
+            </span>
+            <div className="toggle-group" role="group" aria-label="theme">
+              <button
+                type="button"
+                className={theme === "night" ? "active" : "secondary"}
+                onClick={() => void changeTheme("night")}
+              >
+                {t(locale, "themeNight")}
+              </button>
+              <button
+                type="button"
+                className={theme === "day" ? "active" : "secondary"}
+                onClick={() => void changeTheme("day")}
+              >
+                {t(locale, "themeDay")}
+              </button>
+            </div>
+            <div className="toggle-group" role="group" aria-label="language">
+              <button
+                type="button"
+                className={locale === "fa" ? "active" : "secondary"}
+                onClick={() => void changeLocale("fa")}
+              >
+                {t(locale, "langFa")}
+              </button>
+              <button
+                type="button"
+                className={locale === "en" ? "active" : "secondary"}
+                onClick={() => void changeLocale("en")}
+              >
+                {t(locale, "langEn")}
+              </button>
+            </div>
+          </div>
+        </div>
+        <p>{t(locale, "tagline")}</p>
       </header>
 
       <div className="layout">
         <aside className="panel">
-          <h2>شبکه مغازه</h2>
+          <h2>{t(locale, "networkShop")}</h2>
           <div className="status-row">
             <span>ADB</span>
             <span className="pill unknown">{devices.length}</span>
           </div>
           <div className="status-row">
-            <span>Wi‑Fi</span>
+            <span>{t(locale, "wifi")}</span>
             <span className={pillClass(network?.wifiEnabled ?? null)}>
               {pillLabel(network?.wifiEnabled ?? null)}
             </span>
           </div>
           <div className="status-row">
-            <span>شبکه</span>
+            <span>{t(locale, "network")}</span>
             <span className="pill unknown">{network?.wifiSsid || "—"}</span>
           </div>
 
@@ -458,7 +549,7 @@ export function App() {
               onChange={(e) => setDeviceSerial(e.target.value)}
               className="field"
             >
-              <option value="">خودکار</option>
+              <option value="">{t(locale, "auto")}</option>
               {devices.map((d) => (
                 <option key={d.serial} value={d.serial}>
                   {d.serial}
@@ -469,7 +560,7 @@ export function App() {
 
           <div className="actions">
             <button type="button" disabled={busy} onClick={() => void toggleWifi(true)}>
-              روشن + {health?.shopWifiSsid || "nibero"}
+              {t(locale, "onPlus")} {health?.shopWifiSsid || "nibero"}
             </button>
             <button
               type="button"
@@ -477,7 +568,7 @@ export function App() {
               disabled={busy}
               onClick={() => void toggleWifi(false)}
             >
-              خاموش
+              {t(locale, "off")}
             </button>
             <button
               type="button"
@@ -485,7 +576,7 @@ export function App() {
               disabled={busy}
               onClick={() => void shopWifi("forget")}
             >
-              فراموش مغازه
+              {t(locale, "forgetShop")}
             </button>
           </div>
           {actionMsg ? <p className="muted">{actionMsg}</p> : null}
@@ -496,7 +587,9 @@ export function App() {
               className="disclosure"
               onClick={() => setAppsOpen((v) => !v)}
             >
-              <span>برنامه‌ها ({catalog.length})</span>
+              <span>
+                {t(locale, "apps")} ({catalog.length})
+              </span>
               <span className="chevron">{appsOpen ? "▾" : "◂"}</span>
             </button>
 
@@ -540,7 +633,7 @@ export function App() {
                       )
                     }
                   >
-                    نصب انتخاب‌شده‌ها
+                    {t(locale, "installSelected")}
                   </button>
                   <button
                     type="button"
@@ -548,7 +641,7 @@ export function App() {
                     disabled={busy}
                     onClick={() => setShowAddApp((v) => !v)}
                   >
-                    {showAddApp ? "بستن فرم" : "افزودن برنامه"}
+                    {showAddApp ? t(locale, "closeForm") : t(locale, "addApp")}
                   </button>
                 </div>
 
@@ -556,13 +649,13 @@ export function App() {
                   <div className="settings-box">
                     <input
                       className="field"
-                      placeholder="نام نمایشی (مثلاً اسنپ)"
+                      placeholder={t(locale, "displayName")}
                       value={newApp.label}
                       onChange={(e) => setNewApp((s) => ({ ...s, label: e.target.value }))}
                     />
                     <input
                       className="field"
-                      placeholder="packageId (مثلاً cab.snapp.passenger)"
+                      placeholder={t(locale, "packageId")}
                       value={newApp.packageId}
                       onChange={(e) =>
                         setNewApp((s) => ({ ...s, packageId: e.target.value }))
@@ -570,7 +663,7 @@ export function App() {
                     />
                     <input
                       className="field"
-                      placeholder="مسیر APK محلی (اختیاری)"
+                      placeholder={t(locale, "localApkOptional")}
                       value={newApp.localApkPath}
                       onChange={(e) =>
                         setNewApp((s) => ({ ...s, localApkPath: e.target.value }))
@@ -578,7 +671,7 @@ export function App() {
                     />
                     <input
                       className="field"
-                      placeholder="گیت‌هاب owner/repo (اختیاری)"
+                      placeholder={t(locale, "githubOptional")}
                       value={newApp.githubRepo}
                       onChange={(e) =>
                         setNewApp((s) => ({ ...s, githubRepo: e.target.value }))
@@ -586,12 +679,12 @@ export function App() {
                     />
                     <input
                       className="field"
-                      placeholder="لینک مستقیم APK (اختیاری)"
+                      placeholder={t(locale, "apkUrlOptional")}
                       value={newApp.apkUrl}
                       onChange={(e) => setNewApp((s) => ({ ...s, apkUrl: e.target.value }))}
                     />
                     <button type="button" disabled={busy} onClick={() => void addCatalogApp()}>
-                      ذخیره در کاتالوگ
+                      {t(locale, "saveCatalog")}
                     </button>
                   </div>
                 ) : null}
@@ -601,17 +694,17 @@ export function App() {
 
           {installStep === "playAsk" ? (
             <div className="choice-box">
-              <p>اکانت پلی روی گوشی آماده‌ست؟</p>
+              <p>{t(locale, "playAsk")}</p>
               <div className="actions">
                 <button type="button" onClick={() => answerPlayReady(true)}>
-                  بله
+                  {t(locale, "yes")}
                 </button>
                 <button
                   type="button"
                   className="secondary"
                   onClick={() => answerPlayReady(false)}
                 >
-                  خیر
+                  {t(locale, "no")}
                 </button>
               </div>
             </div>
@@ -620,9 +713,9 @@ export function App() {
           {installStep === "source" ? (
             <div className="choice-box">
               <p>
-                از کجا نصب کنم؟
+                {t(locale, "whereInstall")}
                 {!playReady ? (
-                  <span className="muted"> (بدون گوگل پلی)</span>
+                  <span className="muted"> {t(locale, "withoutPlay")}</span>
                 ) : null}
               </p>
               <div className="source-list">
@@ -645,7 +738,7 @@ export function App() {
                   disabled={busy}
                   onClick={() => void runInstallCascade(installSource)}
                 >
-                  شروع نصب
+                  {t(locale, "startInstall")}
                 </button>
                 <button
                   type="button"
@@ -655,7 +748,7 @@ export function App() {
                     setPendingPackages([]);
                   }}
                 >
-                  لغو
+                  {t(locale, "cancel")}
                 </button>
               </div>
             </div>
@@ -664,10 +757,10 @@ export function App() {
           {appMsg ? <p className="muted">{appMsg}</p> : null}
 
           <div className="section-gap">
-            <h2>بک‌آپ گوشی</h2>
-            <p className="muted">عکس، فیلم و مخاطبین → Desktop/Fixo-Backups</p>
+            <h2>{t(locale, "backupPhone")}</h2>
+            <p className="muted">{t(locale, "backupHint")}</p>
             <button type="button" disabled={busy} onClick={() => void startBackup()}>
-              شروع بک‌آپ
+              {t(locale, "startBackup")}
             </button>
 
             {backupJob ? (
@@ -681,7 +774,7 @@ export function App() {
                 <p className="muted">
                   {backupJob.message}
                   {backupJob.currentTarget ? ` — ${backupJob.currentTarget}` : ""}
-                  {` (${backupJob.percent}٪)`}
+                  {` (${backupJob.percent}%)`}
                 </p>
                 <div className="actions">
                   {backupJob.phase === "paused" ? (
@@ -690,7 +783,7 @@ export function App() {
                       className="secondary"
                       onClick={() => void backupAction("resume")}
                     >
-                      ادامه
+                      {t(locale, "resume")}
                     </button>
                   ) : (
                     <button
@@ -701,7 +794,7 @@ export function App() {
                       )}
                       onClick={() => void backupAction("pause")}
                     >
-                      توقف موقت
+                      {t(locale, "pause")}
                     </button>
                   )}
                   <button
@@ -710,7 +803,7 @@ export function App() {
                     disabled={["done", "cancelled", "error"].includes(backupJob.phase)}
                     onClick={() => void backupAction("cancel")}
                   >
-                    لغو
+                    {t(locale, "cancel")}
                   </button>
                 </div>
                 {backupJob.phase === "done" && backupJob.folder ? (
@@ -726,7 +819,7 @@ export function App() {
             style={{ width: "100%", marginTop: 14 }}
             onClick={() => setShowSettings((v) => !v)}
           >
-            {showSettings ? "بستن تنظیمات" : "تنظیمات رمز وای‌فای"}
+            {showSettings ? t(locale, "closeSettings") : t(locale, "settingsWifi")}
           </button>
 
           {showSettings ? (
@@ -735,7 +828,7 @@ export function App() {
                 className="field"
                 value={shopSsid}
                 onChange={(e) => setShopSsid(e.target.value)}
-                placeholder="SSID"
+                placeholder={t(locale, "ssid")}
               />
               <input
                 className="field"
@@ -743,11 +836,13 @@ export function App() {
                 value={shopPassword}
                 onChange={(e) => setShopPassword(e.target.value)}
                 placeholder={
-                  health?.hasShopWifiPassword ? "رمز جدید (اختیاری)" : "رمز وای‌فای مغازه"
+                  health?.hasShopWifiPassword
+                    ? t(locale, "passwordNew")
+                    : t(locale, "passwordShop")
                 }
               />
               <button type="button" disabled={busy} onClick={() => void saveShopSettings()}>
-                ذخیره
+                {t(locale, "save")}
               </button>
               {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
             </div>
@@ -757,7 +852,7 @@ export function App() {
         </aside>
 
         <section className="panel chat">
-          <h2>گفتگو</h2>
+          <h2>{t(locale, "chat")}</h2>
           <div className="messages">
             {messages.map((m, i) => (
               <div key={i} className={`bubble ${m.role}`}>
@@ -771,7 +866,7 @@ export function App() {
               <span>{pendingAction.label}</span>
               <div className="actions">
                 <button type="button" disabled={busy} onClick={() => void send(true)}>
-                  تأیید
+                  {t(locale, "confirm")}
                 </button>
                 <button
                   type="button"
@@ -779,7 +874,7 @@ export function App() {
                   disabled={busy}
                   onClick={() => setPendingAction(null)}
                 >
-                  لغو
+                  {t(locale, "cancel")}
                 </button>
               </div>
             </div>
@@ -789,7 +884,7 @@ export function App() {
             <textarea
               ref={inputRef}
               value={input}
-              placeholder="مثلاً: وای‌فای را روشن کن / تلگرام نصب کن"
+              placeholder={t(locale, "chatPlaceholder")}
               onChange={(e) => setInput(e.target.value)}
               onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
               onKeyDown={(e) => {
@@ -800,7 +895,7 @@ export function App() {
               }}
             />
             <button type="button" disabled={busy} onClick={() => void send(false)}>
-              {busy ? "..." : "ارسال"}
+              {busy ? t(locale, "sending") : t(locale, "send")}
             </button>
           </div>
         </section>
