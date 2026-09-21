@@ -312,6 +312,27 @@ app.post("/api/apps/install-play", async (req, res) => {
   }
 });
 
+app.post("/api/backup", async (req, res) => {
+  try {
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const { backupPhoneMediaAndContacts } = await import("@fixo/mcp-apps");
+    const result = await backupPhoneMediaAndContacts(adb, serial);
+    res.json({
+      ok: true,
+      deviceSerial: serial,
+      ...result,
+      message: `بک‌آپ ذخیره شد: ${result.folder}`,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!process.env.OPENAI_API_KEY) {

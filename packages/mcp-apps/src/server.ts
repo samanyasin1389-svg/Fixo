@@ -102,24 +102,14 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
 
   server.tool(
     "install_from_play",
-    "Install an app from Google Play on the phone (opens listing, taps Install/نصب when possible, waits until installed). Requires confirmed=true. Phone needs Play account + internet.",
+    "Install an app from Google Play on the phone immediately (no confirmation). Opens listing, taps Install/نصب when possible, waits until installed. Phone needs Play account + internet.",
     {
       packageId: z.string().describe("Play packageId or alias like whatsapp"),
-      confirmed: z.boolean().default(false),
       deviceSerial: z.string().optional(),
       timeoutMs: z.number().int().positive().max(300000).optional(),
     },
-    async ({ packageId, confirmed, deviceSerial, timeoutMs }) => {
+    async ({ packageId, deviceSerial, timeoutMs }) => {
       try {
-        if (!confirmed) {
-          return jsonResult(
-            {
-              status: "needs_confirmation",
-              message: `Confirmation required before installing ${packageId} from Play`,
-            },
-            false,
-          );
-        }
         const { serial, evidence } = await resolveSerial(adb, deviceSerial);
         const result = await installFromPlay(adb, serial, packageId, { timeoutMs });
         return jsonResult({

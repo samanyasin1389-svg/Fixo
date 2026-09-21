@@ -164,6 +164,30 @@ export function App() {
     }
   }
 
+  async function runBackup() {
+    setBusy(true);
+    setAppMsg(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/backup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
+      });
+      const data = await res.json();
+      if (!data.ok) setError(data.message ?? "بک‌آپ ناموفق");
+      else {
+        setAppMsg(
+          `بک‌آپ آماده شد (${data.contactsCount ?? 0} مخاطب): ${data.folder}`,
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function toggleWifi(enabled: boolean) {
     setBusy(true);
     setError(null);
@@ -309,6 +333,12 @@ export function App() {
             ))}
           </div>
           {appMsg ? <p className="muted">{appMsg}</p> : null}
+
+          <h2>بک‌آپ</h2>
+          <p className="muted">عکس، فیلم و مخاطبین → Desktop/Fixo-Backups/نام‌گوشی</p>
+          <button type="button" disabled={busy} onClick={() => void runBackup()}>
+            بک‌آپ گرفتن
+          </button>
 
           <button
             type="button"

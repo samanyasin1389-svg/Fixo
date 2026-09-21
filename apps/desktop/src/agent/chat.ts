@@ -20,6 +20,7 @@ import {
   installFromPlay,
   openPlayListing,
   resolvePackageId,
+  backupPhoneMediaAndContacts,
 } from "@fixo/mcp-apps";
 
 export type ChatMessage = {
@@ -33,8 +34,7 @@ export type PendingAction = {
     | "set_mobile_data"
     | "set_airplane_mode"
     | "connect_shop_wifi"
-    | "forget_shop_wifi"
-    | "install_from_play";
+    | "forget_shop_wifi";
   enabled?: boolean;
   deviceSerial?: string;
   packageId?: string;
@@ -366,31 +366,14 @@ export async function handleChat(input: {
     }),
     install_from_play: tool({
       description:
-        "Install an app from Google Play. Opens listing, taps Install/نصب when possible, waits until installed. Requires confirmation. Phone needs Play login + internet.",
+        "Install an app from Google Play immediately (no confirmation). Opens listing, taps Install/نصب when possible, waits until installed. Phone needs Play login + internet.",
       parameters: z.object({
         packageId: z.string().describe("e.g. com.whatsapp or whatsapp"),
-        confirmed: z.boolean().default(false),
         deviceSerial: z.string().optional(),
       }),
-      execute: async ({ packageId, confirmed, deviceSerial }) => {
+      execute: async ({ packageId, deviceSerial }) => {
         const resolved = resolvePackageId(packageId);
-        const label = `نصب از Play: ${resolved.packageId}`;
         const serialHint = deviceSerial ?? input.deviceSerial;
-        if (!confirmed && !input.confirmAction) {
-          pendingAction = {
-            tool: "install_from_play",
-            packageId: resolved.packageId,
-            deviceSerial: serialHint,
-            label,
-          };
-          return toolJson({
-            ok: false,
-            status: "needs_confirmation",
-            message: `Confirmation required: ${label}`,
-            pendingAction,
-          });
-        }
-        assertConfirmed(true, label);
         const { serial, evidence } = await resolveSerial(input.adb, serialHint);
         const result = await installFromPlay(input.adb, serial, resolved.packageId);
         return toolJson({
@@ -401,13 +384,34 @@ export async function handleChat(input: {
         });
       },
     }),
+    backup_phone: tool({
+      description:
+        "Backup photos, videos, and contacts from the phone to a Desktop/Fixo-Backups folder named after the phone. Runs immediately when technician asks.",
+      parameters: z.object({
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ deviceSerial }) => {
+        const { serial, evidence } = await resolveSerial(
+          input.adb,
+          deviceSerial ?? input.deviceSerial,
+        );
+        const result = await backupPhoneMediaAndContacts(input.adb, serial);
+        return toolJson({
+          ok: true,
+          deviceSerial: serial,
+          ...result,
+          evidence: [...evidence, ...result.evidence],
+          message: `بک‌آپ در ${result.folder} ذخیره شد`,
+        });
+      },
+    }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, open_play_listing, install_from_play.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, open_play_listing, install_from_play, backup_phone.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
-اگر گفت اپی را از گوگل‌پلی/Play نصب کن، از install_from_play استفاده کن. اپ‌های پرتکرار: واتساپ، اینستاگرام، تلگرام، وی‌توباکس (v2box / dev.hexasoftware.v2box).
-قبل از نصب Play تأیید بگیر. گوشی باید اکانت گوگل و اینترنت داشته باشد.
+اگر گفت اپی را نصب کن، فوراً install_from_play را بدون تأیید اضافه صدا بزن (واتساپ/اینستا/تلگرام/وی‌توباکس).
+اگر گفت بک‌آپ بگیر / عکس و فیلم و مخاطبین را بردار، از backup_phone استفاده کن.
 جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت ننویس.`;
 
   let messages = input.messages.map((m) => ({

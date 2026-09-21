@@ -4,3 +4,4 @@ export {
   openPlayListing,
   installFromPlay,
 } from "./play.js";
+export { backupPhoneMediaAndContacts } from "./backup.js";
