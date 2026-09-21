@@ -1,0 +1,14 @@
+{
+  "name": "fixo",
+  "private": true,
+  "version": "0.1.0",
+  "description": "AI assistant for Android software repair shops",
+  "packageManager": "pnpm@9.15.0",
+  "scripts": {
+    "build": "pnpm -r run build",
+    "dev": "pnpm --filter @fixo/desktop dev:all",
+    "dev:mcp": "pnpm --filter @fixo/mcp-network start",
+    "test": "pnpm -r run test",
+    "typecheck": "pnpm -r run typecheck"
+  }
+}
