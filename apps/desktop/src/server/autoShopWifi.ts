@@ -13,6 +13,8 @@ export type AutoSession = {
   wirelessSerial?: string;
   ssid: string;
   phase:
+    | "idle"
+    | "blocked"
     | "connecting"
     | "online"
     | "forgetting"
@@ -20,6 +22,15 @@ export type AutoSession = {
     | "error";
   message: string;
   updatedAt: string;
+};
+
+export type AutoStatus = {
+  enabled: boolean;
+  hasPassword: boolean;
+  ssid: string;
+  usbDevices: string[];
+  sessions: AutoSession[];
+  blocker: string | null;
 };
 
 type Logger = (line: string) => void;
@@ -30,6 +41,7 @@ export class ShopWifiAutoManager {
   private busy = new Set<string>();
   private timer: NodeJS.Timeout | null = null;
   private log: Logger;
+  private lastBlocker: string | null = null;
 
   constructor(
     private adb: AdbRunner,
@@ -58,6 +70,84 @@ export class ShopWifiAutoManager {
     );
   }
 
+  async getStatus(): Promise<AutoStatus> {
+    const settings = await loadSettings();
+    let usbDevices: string[] = [];
+    try {
+      const devices = await listDevices(this.adb);
+      usbDevices = devices
+        .filter((d) => d.status === "device" && !d.serial.includes(":"))
+        .map((d) => d.serial);
+    } catch {
+      usbDevices = [];
+    }
+
+    let blocker: string | null = null;
+    if (settings.autoShopWifi === false) {
+      blocker = "اتصال خودکار در تنظیمات خاموش است.";
+    } else if (!settings.shopWifiPassword) {
+      blocker = "رمز وای‌فای مغازه ذخیره نشده. در تنظیمات برنامه رمز nibero را ذخیره کن.";
+    } else if (usbDevices.length === 0) {
+      blocker = "هیچ دستگاه ADB آماده‌ای دیده نمی‌شود.";
+    }
+
+    this.lastBlocker = blocker;
+    return {
+      enabled: settings.autoShopWifi !== false,
+      hasPassword: Boolean(settings.shopWifiPassword),
+      ssid: settings.shopWifiSsid,
+      usbDevices,
+      sessions: this.getSessions(),
+      blocker,
+    };
+  }
+
+  /** Force re-run auto connect for all currently attached USB devices. */
+  async forceRun(): Promise<AutoStatus> {
+    const settings = await loadSettings();
+    if (settings.autoShopWifi === false) {
+      this.upsert("system", {
+        ssid: settings.shopWifiSsid,
+        phase: "blocked",
+        message: "اتصال خودکار خاموش است.",
+      });
+      return this.getStatus();
+    }
+    if (!settings.shopWifiPassword) {
+      this.upsert("system", {
+        ssid: settings.shopWifiSsid,
+        phase: "blocked",
+        message: "رمز وای‌فای مغازه ذخیره نشده است.",
+      });
+      return this.getStatus();
+    }
+
+    const devices = await listDevices(this.adb);
+    const usbReady = devices.filter(
+      (d) => d.status === "device" && !d.serial.includes(":"),
+    );
+    for (const device of usbReady) {
+      this.knownUsb.delete(device.serial);
+      this.busy.delete(device.serial);
+    }
+    for (const device of usbReady) {
+      this.knownUsb.add(device.serial);
+      await this.onUsbAttach(
+        device.serial,
+        settings.shopWifiSsid,
+        settings.shopWifiPassword,
+      );
+    }
+    if (usbReady.length === 0) {
+      this.upsert("system", {
+        ssid: settings.shopWifiSsid,
+        phase: "blocked",
+        message: "ADB دستگاهی نمی‌بیند. adb devices را چک کن.",
+      });
+    }
+    return this.getStatus();
+  }
+
   private upsert(
     serial: string,
     patch: Partial<AutoSession> & Pick<AutoSession, "phase" | "message" | "ssid">,
@@ -77,8 +167,19 @@ export class ShopWifiAutoManager {
   private async tick() {
     try {
       const settings = await loadSettings();
-      if (settings.autoShopWifi === false) return;
+      if (settings.autoShopWifi === false) {
+        this.lastBlocker = "auto disabled";
+        return;
+      }
       if (!settings.shopWifiPassword) {
+        this.lastBlocker = "missing password";
+        // Visible in UI instead of silent skip
+        this.upsert("system", {
+          ssid: settings.shopWifiSsid,
+          phase: "blocked",
+          message:
+            "رمز وای‌فای مغازه ذخیره نشده. SSID/رمز را در تنظیمات ذخیره کن تا اتصال خودکار شروع شود.",
+        });
         return;
       }
 
@@ -88,14 +189,20 @@ export class ShopWifiAutoManager {
       );
       const usbSerials = new Set(usbReady.map((d) => d.serial));
 
-      // New USB attachments
+      if (usbReady.length > 0 && this.sessions.get("system")?.phase === "blocked") {
+        this.sessions.delete("system");
+      }
+
       for (const device of usbReady) {
         if (this.knownUsb.has(device.serial)) continue;
         this.knownUsb.add(device.serial);
-        void this.onUsbAttach(device.serial, settings.shopWifiSsid, settings.shopWifiPassword);
+        void this.onUsbAttach(
+          device.serial,
+          settings.shopWifiSsid,
+          settings.shopWifiPassword,
+        );
       }
 
-      // USB removals → forget via wireless if possible
       for (const serial of [...this.knownUsb]) {
         if (usbSerials.has(serial)) continue;
         this.knownUsb.delete(serial);
@@ -124,7 +231,7 @@ export class ShopWifiAutoManager {
         ssid,
         phase: "connecting",
         message: connected.connected
-          ? `وصل به ${ssid} شد — در حال آماده‌سازی ADB بی‌سیم برای فراموشی بعد از قطع کابل`
+          ? `وصل به ${ssid} شد (strategy=${connected.strategy}) — آماده‌سازی ADB بی‌سیم`
           : `تلاش اتصال به ${ssid} انجام شد`,
       });
 
@@ -141,7 +248,7 @@ export class ShopWifiAutoManager {
         this.upsert(serial, {
           ssid,
           phase: "online",
-          message: `به ${ssid} وصل شد، ولی ADB بی‌سیم فعال نشد. با قطع کابل ممکن است فراموشی خودکار ممکن نباشد: ${
+          message: `به ${ssid} وصل شد، ولی ADB بی‌سیم فعال نشد. فراموشی بعد از قطع کابل ممکن است کار نکند: ${
             err instanceof Error ? err.message : String(err)
           }`,
         });
@@ -153,7 +260,6 @@ export class ShopWifiAutoManager {
         message: `اتصال خودکار ناموفق: ${err instanceof Error ? err.message : String(err)}`,
       });
       this.log(`[auto-wifi] attach failed ${serial}: ${err}`);
-      // allow retry on later ticks (e.g. after password is saved)
       this.knownUsb.delete(serial);
     } finally {
       this.busy.delete(serial);
@@ -179,13 +285,12 @@ export class ShopWifiAutoManager {
         ssid,
         phase: "error",
         message:
-          "کابل قطع شد ولی ADB بی‌سیم نداشتیم؛ نمی‌شود بعد از قطع کابل شبکه را فراموش کرد. دفعه بعد گوشی را تا تکمیل اتصال نگه دارید.",
+          "کابل قطع شد ولی ADB بی‌سیم نداشتیم؛ فراموشی بعد از قطع ممکن نشد.",
       });
       return;
     }
 
     try {
-      // Give wireless link a moment after USB unplug
       await sleep(1500);
       await forgetWifi(this.adb, targetSerial, ssid);
       await disconnectWirelessAdb(this.adb, targetSerial);

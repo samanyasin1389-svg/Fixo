@@ -70,21 +70,34 @@ export async function connectWifi(
 
   const strategies: Array<{ name: string; command: string }> = [
     {
-      name: "cmd_wifi_connect_wpa2",
+      name: "cmd_wifi_connect_wpa2_quoted",
       command: `cmd wifi connect-network ${quotedSsid} wpa2 ${quotedPass}`,
     },
     {
-      name: "cmd_wifi_connect_wpa3",
+      name: "cmd_wifi_connect_wpa3_quoted",
       command: `cmd wifi connect-network ${quotedSsid} wpa3 ${quotedPass}`,
-    },
-    // Some Samsung/Xiaomi builds accept security type differently
-    {
-      name: "cmd_wifi_connect_wpa2_unquoted_type",
-      command: `cmd wifi connect-network ${quotedSsid} wpa2 ${quotedPass}`,
     },
   ];
 
-  // Xiaomi sometimes needs an explicit save/connect via cmd wifi help probing
+  // Prefer unquoted form when SSID/password are simple (helps some Xiaomi shells)
+  if (/^[A-Za-z0-9._-]+$/.test(ssid) && /^[A-Za-z0-9._-]+$/.test(password)) {
+    strategies.unshift({
+      name: "cmd_wifi_connect_wpa2_plain",
+      command: `cmd wifi connect-network ${ssid} wpa2 ${password}`,
+    });
+    strategies.push({
+      name: "cmd_wifi_connect_wpa3_plain",
+      command: `cmd wifi connect-network ${ssid} wpa3 ${password}`,
+    });
+  }
+
+  // Ensure scanning is allowed, then wait for scan results (Xiaomi/Samsung)
+  const scanAlways = await shell(adb, serial, "cmd wifi set-scan-always-available enabled");
+  evidence.push(redactEvidence(scanAlways.evidence, password));
+  const startScan = await shell(adb, serial, "cmd wifi start-scan");
+  evidence.push(redactEvidence(startScan.evidence, password));
+  await sleep(2500);
+
   const help = await shell(adb, serial, "cmd wifi help");
   evidence.push(redactEvidence(help.evidence, password));
 

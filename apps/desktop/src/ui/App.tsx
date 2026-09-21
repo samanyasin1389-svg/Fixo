@@ -44,6 +44,7 @@ export function App() {
   const [autoSessions, setAutoSessions] = useState<
     Array<{ usbSerial: string; phase: string; message: string; wirelessSerial?: string }>
   >([]);
+  const [autoBlocker, setAutoBlocker] = useState<string | null>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -78,7 +79,10 @@ export function App() {
       if (s.ok && typeof s.settings?.autoShopWifi === "boolean") {
         setAutoShopWifi(s.settings.autoShopWifi);
       }
-      if (a.ok) setAutoSessions(a.sessions ?? []);
+      if (a.ok) {
+        setAutoSessions(a.sessions ?? []);
+        setAutoBlocker(a.blocker ?? null);
+      }
       if (d.ok) setDevices(d.devices ?? []);
       else setError(d.message ?? "خطا در خواندن دستگاه‌ها");
 
@@ -127,7 +131,25 @@ export function App() {
     await refresh();
   }
 
-  async function shopWifi(action: "connect" | "forget") {
+  async function runAutoNow() {
+    setBusy(true);
+    setError(null);
+    setActionMsg(null);
+    try {
+      const res = await fetch("/api/auto-wifi/run", { method: "POST" });
+      const data = await res.json();
+      setAutoSessions(data.sessions ?? []);
+      setAutoBlocker(data.blocker ?? null);
+      if (data.blocker) setError(data.blocker);
+      else setActionMsg(data.sessions?.[0]?.message ?? "اجرای خودکار شروع شد");
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
     setBusy(true);
     setActionMsg(null);
     setError(null);
@@ -322,17 +344,21 @@ export function App() {
             />
             اتصال/فراموشی خودکار فعال باشد
           </label>
+          {autoBlocker ? <p className="error">{autoBlocker}</p> : null}
           {autoSessions[0] ? (
             <p className="muted" style={{ marginTop: 8 }}>
               وضعیت: {autoSessions[0].phase} — {autoSessions[0].message}
             </p>
           ) : (
             <p className="muted" style={{ marginTop: 8 }}>
-              هنوز نشست خودکاری نیست. گوشی را وصل کن.
+              هنوز نشست خودکاری نیست. گوشی را وصل کن یا «اجرای خودکار الان» را بزن.
             </p>
           )}
 
           <div className="actions" style={{ marginTop: 10 }}>
+            <button type="button" disabled={busy} onClick={() => void runAutoNow()}>
+              اجرای خودکار الان
+            </button>
             <button type="button" disabled={busy} onClick={() => void shopWifi("connect")}>
               وصل دستی
             </button>

@@ -42,8 +42,21 @@ app.get("/api/health", async (_req, res) => {
   });
 });
 
-app.get("/api/auto-wifi/sessions", (_req, res) => {
-  res.json({ ok: true, sessions: autoWifi.getSessions() });
+app.get("/api/auto-wifi/sessions", async (_req, res) => {
+  const status = await autoWifi.getStatus();
+  res.json({ ok: true, ...status });
+});
+
+app.post("/api/auto-wifi/run", async (_req, res) => {
+  try {
+    const status = await autoWifi.forceRun();
+    res.json({ ok: !status.blocker || status.sessions.some((s) => s.phase === "online" || s.phase === "connecting"), ...status });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 app.get("/api/settings", async (_req, res) => {
