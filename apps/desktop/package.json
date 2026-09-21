@@ -7,7 +7,7 @@
     "dev": "tsx watch src/server/index.ts",
     "dev:ui": "vite --host 127.0.0.1",
     "dev:all": "pnpm run build:deps && pnpm exec concurrently -k \"pnpm run dev:ui\" \"pnpm run dev\"",
-    "build:deps": "pnpm --filter @fixo/shared build && pnpm --filter @fixo/mcp-network build",
+    "build:deps": "pnpm --filter @fixo/shared build && pnpm --filter @fixo/mcp-network build && pnpm --filter @fixo/mcp-apps build",
     "build": "pnpm run build:deps && tsc -p tsconfig.json && vite build",
     "start": "node dist/server/index.js",
     "typecheck": "tsc -p tsconfig.json --noEmit",
@@ -15,6 +15,7 @@
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.3.0",
+    "@fixo/mcp-apps": "workspace:*",
     "@fixo/mcp-network": "workspace:*",
     "@fixo/shared": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.8.0",

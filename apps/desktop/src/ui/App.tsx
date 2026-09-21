@@ -45,12 +45,13 @@ export function App() {
     Array<{ usbSerial: string; phase: string; message: string; wirelessSerial?: string }>
   >([]);
   const [autoBlocker, setAutoBlocker] = useState<string | null>(null);
-  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [appQuery, setAppQuery] = useState("whatsapp");
+  const [appMsg, setAppMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
       content:
-        "سلام. گوشی را وصل کن. می‌توانم Wi‑Fi را خاموش/روشن کنم یا به وای‌فای مغازه وصل/فراموش کنم.",
+        "سلام. می‌توانم Wi‑Fi را روشن کنم و به وای‌فای مغازه وصل کنم، یا اپ را از Google Play نصب کنم.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -156,7 +157,78 @@ export function App() {
     }
   }
 
-  async function toggleWifi(enabled: boolean) {
+  async function installPlayApp() {
+    setBusy(true);
+    setAppMsg(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/apps/install-play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          packageId: appQuery,
+          deviceSerial: selectedSerial || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) setError(data.message ?? "نصب ناموفق");
+      else setAppMsg(data.message ?? "نصب شد");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function openPlayApp() {
+    setBusy(true);
+    setAppMsg(null);
+    setError(null);
+    try {
+      const res = await fetch("/api/apps/open-play", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          packageId: appQuery,
+          deviceSerial: selectedSerial || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) setError(data.message ?? "باز نشد");
+      else setAppMsg(data.message ?? "باز شد");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function checkPlayApp() {
+    setBusy(true);
+    setAppMsg(null);
+    setError(null);
+    try {
+      const q = new URLSearchParams({
+        packageId: appQuery,
+        ...(selectedSerial ? { deviceSerial: selectedSerial } : {}),
+      });
+      const res = await fetch(`/api/apps/check?${q}`);
+      const data = await res.json();
+      if (!data.ok) setError(data.message ?? "خطا");
+      else {
+        setAppMsg(
+          data.installed
+            ? `${data.packageId} نصب است (${data.versionName ?? "?"})`
+            : `${data.packageId} نصب نیست`,
+        );
+      }
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
     setBusy(true);
     setError(null);
     try {
@@ -339,6 +411,50 @@ export function App() {
             </button>
           </div>
           {actionMsg ? <p className="muted">{actionMsg}</p> : null}
+
+          <h2 style={{ marginTop: 22 }}>نصب از Google Play</h2>
+          <p className="muted">
+            نام اپ یا packageId (مثل whatsapp یا com.whatsapp). گوشی باید اکانت گوگل و اینترنت
+            داشته باشد.
+          </p>
+          <input
+            value={appQuery}
+            onChange={(e) => setAppQuery(e.target.value)}
+            placeholder="whatsapp"
+            style={{
+              width: "100%",
+              marginTop: 6,
+              marginBottom: 10,
+              padding: 8,
+              borderRadius: 10,
+              border: "1px solid var(--line)",
+              background: "rgba(0,0,0,0.25)",
+              color: "var(--ink)",
+              font: "inherit",
+            }}
+          />
+          <div className="actions">
+            <button type="button" disabled={busy || !appQuery.trim()} onClick={() => void installPlayApp()}>
+              نصب از Play
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || !appQuery.trim()}
+              onClick={() => void openPlayApp()}
+            >
+              باز کردن صفحه
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy || !appQuery.trim()}
+              onClick={() => void checkPlayApp()}
+            >
+              چک نصب
+            </button>
+          </div>
+          {appMsg ? <p className="muted">{appMsg}</p> : null}
 
           <h2 style={{ marginTop: 22 }}>تنظیمات برنامه</h2>
           <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>

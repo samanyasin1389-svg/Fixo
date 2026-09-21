@@ -15,6 +15,12 @@ import {
   setMobileData,
   setWifi,
 } from "@fixo/mcp-network";
+import {
+  checkAppInstalled,
+  installFromPlay,
+  openPlayListing,
+  resolvePackageId,
+} from "@fixo/mcp-apps";
 
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
@@ -27,9 +33,11 @@ export type PendingAction = {
     | "set_mobile_data"
     | "set_airplane_mode"
     | "connect_shop_wifi"
-    | "forget_shop_wifi";
+    | "forget_shop_wifi"
+    | "install_from_play";
   enabled?: boolean;
   deviceSerial?: string;
+  packageId?: string;
   label: string;
 };
 
@@ -314,15 +322,93 @@ export async function handleChat(input: {
         });
       },
     }),
+    check_app_installed: tool({
+      description: "Check if an app/package is installed.",
+      parameters: z.object({
+        packageId: z.string().describe("packageId or alias like whatsapp"),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ packageId, deviceSerial }) => {
+        const resolved = resolvePackageId(packageId);
+        const { serial, evidence } = await resolveSerial(
+          input.adb,
+          deviceSerial ?? input.deviceSerial,
+        );
+        const check = await checkAppInstalled(input.adb, serial, resolved.packageId);
+        return toolJson({
+          ok: true,
+          deviceSerial: serial,
+          packageId: resolved.packageId,
+          ...check,
+          evidence,
+        });
+      },
+    }),
+    open_play_listing: tool({
+      description: "Open Google Play listing for an app on the phone.",
+      parameters: z.object({
+        packageId: z.string(),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ packageId, deviceSerial }) => {
+        const { serial, evidence } = await resolveSerial(
+          input.adb,
+          deviceSerial ?? input.deviceSerial,
+        );
+        const opened = await openPlayListing(input.adb, serial, packageId);
+        return toolJson({
+          ok: true,
+          deviceSerial: serial,
+          ...opened,
+          evidence: [...evidence, ...opened.evidence],
+        });
+      },
+    }),
+    install_from_play: tool({
+      description:
+        "Install an app from Google Play. Opens listing, taps Install/نصب when possible, waits until installed. Requires confirmation. Phone needs Play login + internet.",
+      parameters: z.object({
+        packageId: z.string().describe("e.g. com.whatsapp or whatsapp"),
+        confirmed: z.boolean().default(false),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ packageId, confirmed, deviceSerial }) => {
+        const resolved = resolvePackageId(packageId);
+        const label = `نصب از Play: ${resolved.packageId}`;
+        const serialHint = deviceSerial ?? input.deviceSerial;
+        if (!confirmed && !input.confirmAction) {
+          pendingAction = {
+            tool: "install_from_play",
+            packageId: resolved.packageId,
+            deviceSerial: serialHint,
+            label,
+          };
+          return toolJson({
+            ok: false,
+            status: "needs_confirmation",
+            message: `Confirmation required: ${label}`,
+            pendingAction,
+          });
+        }
+        assertConfirmed(true, label);
+        const { serial, evidence } = await resolveSerial(input.adb, serialHint);
+        const result = await installFromPlay(input.adb, serial, resolved.packageId);
+        return toolJson({
+          ok: result.installed,
+          deviceSerial: serial,
+          ...result,
+          evidence: [...evidence, ...result.evidence],
+        });
+      },
+    }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi.
-مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ این کار علاوه بر روشن کردن، به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌کند.
-اتصال خودکار با وصل کابل نداریم؛ فقط وقتی کاربر بگوید.
-اگر گفت شبکه مغازه را فراموش کن از forget_shop_wifi استفاده کن.
-قبل از تغییر مخرب تأیید بگیر؛ برای روشن کردن وای‌فای وقتی کاربر صریح گفته، می‌توانی confirmed=true بزنی.
-جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت در جواب ننویس.`;
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, open_play_listing, install_from_play.
+مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
+اگر گفت اپی را از گوگل‌پلی/Play نصب کن، از install_from_play استفاده کن (aliasهایی مثل whatsapp, telegram, اینستاگرام مجاز است).
+قبل از نصب Play تأیید بگیر. گوشی باید اکانت گوگل و اینترنت داشته باشد.
+جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت ننویس.`;
 
   let messages = input.messages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",
@@ -335,7 +421,7 @@ export async function handleChat(input: {
       {
         role: "user" as const,
         content:
-          "تعمیرکار عملیات پیشنهادی را تأیید کرد. همان کار شبکه را الان با confirmed=true اجرا کن و نتیجه نهایی را بگو.",
+          "تعمیرکار عملیات پیشنهادی را تأیید کرد. همان کار را الان با confirmed=true اجرا کن و نتیجه نهایی را بگو.",
       },
     ];
   }

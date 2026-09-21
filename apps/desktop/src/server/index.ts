@@ -235,6 +235,83 @@ app.post("/api/network/shop-wifi/forget", async (req, res) => {
   }
 });
 
+app.get("/api/apps/check", async (req, res) => {
+  try {
+    const packageId =
+      typeof req.query.packageId === "string" ? req.query.packageId : "";
+    if (!packageId) {
+      res.status(400).json({ ok: false, message: "packageId required" });
+      return;
+    }
+    const serialParam =
+      typeof req.query.deviceSerial === "string" ? req.query.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const { resolvePackageId, checkAppInstalled } = await import("@fixo/mcp-apps");
+    const resolved = resolvePackageId(packageId);
+    const check = await checkAppInstalled(adb, serial, resolved.packageId);
+    res.json({
+      ok: true,
+      deviceSerial: serial,
+      packageId: resolved.packageId,
+      ...check,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/apps/open-play", async (req, res) => {
+  try {
+    const packageId = String(req.body?.packageId ?? "");
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const { openPlayListing } = await import("@fixo/mcp-apps");
+    const opened = await openPlayListing(adb, serial, packageId);
+    res.json({
+      ok: true,
+      deviceSerial: serial,
+      packageId: opened.packageId,
+      evidence: opened.evidence,
+      message: `صفحه Play برای ${opened.packageId} باز شد`,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/apps/install-play", async (req, res) => {
+  try {
+    const packageId = String(req.body?.packageId ?? "");
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const { installFromPlay } = await import("@fixo/mcp-apps");
+    const result = await installFromPlay(adb, serial, packageId, {
+      timeoutMs: Number(req.body?.timeoutMs) || 120_000,
+    });
+    res.json({
+      ok: result.installed,
+      deviceSerial: serial,
+      ...result,
+      message: result.installed
+        ? `${result.packageId} نصب شد`
+        : `نصب ${result.packageId} کامل نشد`,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!process.env.OPENAI_API_KEY) {

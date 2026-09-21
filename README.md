@@ -68,6 +68,14 @@ pnpm --filter @fixo/mcp-network dev
 | `connect_wifi` | وصل به SSID/رمز (Samsung + Xiaomi fallback) |
 | `forget_wifi` | فراموش کردن شبکه ذخیره‌شده |
 
+### Play Install (`@fixo/mcp-apps`)
+| Tool | کار |
+|------|-----|
+| `resolve_play_app` | تبدیل نام/alias به packageId |
+| `check_app_installed` | چک نصب بودن اپ |
+| `open_play_listing` | باز کردن صفحه اپ در Play |
+| `install_from_play` | نصب از Play (تأیید + UIAutomator) |
+
 وای‌فای مغازه از UI یا Agent با تنظیمات محلی (`~/.config/fixo/settings.json` یا `SHOP_WIFI_*` در `.env`) کار می‌کند.
 
 ### وای‌فای مغازه
