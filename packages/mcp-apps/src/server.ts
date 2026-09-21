@@ -10,6 +10,9 @@ import {
 } from "@fixo/mcp-network";
 import { checkAppInstalled, installFromPlay, openPlayListing } from "./play.js";
 import { resolvePackageId } from "./aliases.js";
+import { installAppCascade } from "./install.js";
+import { listCatalogApps, upsertCatalogApp } from "./catalog.js";
+import { backupJobs } from "./backup.js";
 
 function jsonResult(payload: Record<string, unknown>, ok = true) {
   return {
@@ -120,6 +123,114 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
             : `Install attempt finished for ${result.packageId}`,
           data: result,
           evidence: [...evidence, ...result.evidence],
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "install_app",
+    "Install an app with source cascade: Play → local APK → GitHub release → direct URL. Optional preferred source with fallback.",
+    {
+      packageId: z.string(),
+      deviceSerial: z.string().optional(),
+      source: z.enum(["auto", "play", "local_apk", "github", "url"]).optional(),
+      fallback: z.boolean().optional(),
+      localApkPath: z.string().optional(),
+      githubRepo: z.string().optional(),
+      apkUrl: z.string().optional(),
+      timeoutMs: z.number().int().positive().max(300000).optional(),
+    },
+    async (args) => {
+      try {
+        const { serial, evidence } = await resolveSerial(adb, args.deviceSerial);
+        const result = await installAppCascade(adb, serial, args.packageId, {
+          source: args.source,
+          fallback: args.fallback,
+          localApkPath: args.localApkPath,
+          githubRepo: args.githubRepo,
+          apkUrl: args.apkUrl,
+          timeoutMs: args.timeoutMs,
+        });
+        return jsonResult({
+          deviceSerial: serial,
+          status: result.installed ? "installed" : "failed",
+          message: result.installed
+            ? `Installed ${result.packageId} via ${result.usedSource}`
+            : `Install failed for ${result.packageId}`,
+          data: result,
+          evidence: [...evidence, ...result.evidence],
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "list_catalog_apps",
+    "List Fixo local apps catalog (labels, packageIds, install sources).",
+    {},
+    async () => {
+      try {
+        const apps = await listCatalogApps();
+        return jsonResult({ status: "ok", message: `${apps.length} apps`, data: { apps } });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "add_catalog_app",
+    "Add or update an app in the local Fixo catalog.",
+    {
+      id: z.string().optional(),
+      label: z.string(),
+      packageId: z.string(),
+      localApkPath: z.string().optional(),
+      githubRepo: z.string().optional(),
+      apkUrl: z.string().optional(),
+      play: z.boolean().optional(),
+      pinned: z.boolean().optional(),
+    },
+    async (args) => {
+      try {
+        const app = await upsertCatalogApp({
+          id: args.id ?? "",
+          label: args.label,
+          packageId: args.packageId,
+          pinned: args.pinned,
+          sources: {
+            play: args.play ?? true,
+            localApkPath: args.localApkPath,
+            githubRepo: args.githubRepo,
+            apkUrl: args.apkUrl,
+          },
+        });
+        return jsonResult({ status: "ok", message: `Saved ${app.label}`, data: app });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "start_backup",
+    "Start a controllable phone backup (media + contacts) and return a jobId for progress/pause/cancel.",
+    { deviceSerial: z.string().optional() },
+    async ({ deviceSerial }) => {
+      try {
+        const { serial, evidence } = await resolveSerial(adb, deviceSerial);
+        const progress = backupJobs.start(adb, serial);
+        return jsonResult({
+          deviceSerial: serial,
+          status: "started",
+          message: "بک‌آپ شروع شد",
+          data: progress,
+          evidence,
         });
       } catch (err) {
         return fail(err);
