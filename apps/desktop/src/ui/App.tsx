@@ -2,7 +2,6 @@ import { useEffect, useMemo, useRef, useState } from "react";
 
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
-
 type Device = { serial: string; status: string };
 type NetworkStatus = {
   wifiEnabled: boolean | null;
@@ -11,12 +10,14 @@ type NetworkStatus = {
   wifiConnected: boolean | null;
   wifiSsid?: string | null;
 };
-type PendingAction = {
-  tool: string;
-  enabled?: boolean;
-  deviceSerial?: string;
-  label: string;
-};
+type PendingAction = { tool: string; label: string };
+
+const QUICK_APPS = [
+  { label: "واتساپ", packageId: "com.whatsapp" },
+  { label: "اینستا", packageId: "com.instagram.android" },
+  { label: "تلگرام", packageId: "org.telegram.messenger" },
+  { label: "وی‌توباکس", packageId: "dev.hexasoftware.v2box" },
+] as const;
 
 function pillClass(v: boolean | null) {
   if (v === null) return "pill unknown";
@@ -24,13 +25,13 @@ function pillClass(v: boolean | null) {
 }
 
 function pillLabel(v: boolean | null) {
-  if (v === null) return "نامشخص";
+  if (v === null) return "—";
   return v ? "ON" : "OFF";
 }
 
 export function App() {
   const [devices, setDevices] = useState<Device[]>([]);
-  const [deviceSerial, setDeviceSerial] = useState<string>("");
+  const [deviceSerial, setDeviceSerial] = useState("");
   const [network, setNetwork] = useState<NetworkStatus | null>(null);
   const [health, setHealth] = useState<{
     hasOpenAIKey: boolean;
@@ -40,19 +41,13 @@ export function App() {
   } | null>(null);
   const [shopSsid, setShopSsid] = useState("nibero");
   const [shopPassword, setShopPassword] = useState("");
-  const [autoShopWifi, setAutoShopWifi] = useState(false);
-  const [autoSessions, setAutoSessions] = useState<
-    Array<{ usbSerial: string; phase: string; message: string; wirelessSerial?: string }>
-  >([]);
-  const [autoBlocker, setAutoBlocker] = useState<string | null>(null);
-  const [appQuery, setAppQuery] = useState("whatsapp");
-  const [appMsg, setAppMsg] = useState<string | null>(null);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
+  const [showSettings, setShowSettings] = useState(false);
+  const [appMsg, setAppMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
-      content:
-        "سلام. می‌توانم Wi‑Fi را روشن کنم و به وای‌فای مغازه وصل کنم، یا اپ را از Google Play نصب کنم.",
+      content: "سلام. وای‌فای مغازه یا نصب واتساپ/اینستا/تلگرام/وی‌توباکس را بگو.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -70,21 +65,13 @@ export function App() {
   async function refresh() {
     setError(null);
     try {
-      const [h, d, s, a] = await Promise.all([
+      const [h, d, s] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         fetch("/api/devices").then((r) => r.json()),
         fetch("/api/settings").then((r) => r.json()),
-        fetch("/api/auto-wifi/sessions").then((r) => r.json()),
       ]);
       setHealth(h);
       if (s.ok && s.settings?.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
-      if (s.ok && typeof s.settings?.autoShopWifi === "boolean") {
-        setAutoShopWifi(s.settings.autoShopWifi);
-      }
-      if (a.ok) {
-        setAutoSessions(a.sessions ?? []);
-        setAutoBlocker(a.blocker ?? null);
-      }
       if (d.ok) setDevices(d.devices ?? []);
       else setError(d.message ?? "خطا در خواندن دستگاه‌ها");
 
@@ -97,9 +84,7 @@ export function App() {
         ).then((r) => r.json());
         if (n.ok) setNetwork(n.status);
         else setNetwork(null);
-      } else {
-        setNetwork(null);
-      }
+      } else setNetwork(null);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -119,7 +104,6 @@ export function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         shopWifiSsid: shopSsid,
-        autoShopWifi,
         ...(shopPassword ? { shopWifiPassword: shopPassword } : {}),
       }),
     });
@@ -129,7 +113,7 @@ export function App() {
       return;
     }
     setShopPassword("");
-    setSettingsMsg("تنظیمات وای‌فای مغازه ذخیره شد.");
+    setSettingsMsg("ذخیره شد.");
     await refresh();
   }
 
@@ -144,9 +128,8 @@ export function App() {
         body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
       });
       const data = await res.json();
-      if (!data.ok) {
-        setError(data.message ?? "عملیات ناموفق");
-      } else {
+      if (!data.ok) setError(data.message ?? "ناموفق");
+      else {
         setActionMsg(data.message ?? "انجام شد");
         if (data.after) setNetwork(data.after);
       }
@@ -158,7 +141,7 @@ export function App() {
     }
   }
 
-  async function installPlayApp() {
+  async function installPlayApp(packageId: string, label: string) {
     setBusy(true);
     setAppMsg(null);
     setError(null);
@@ -167,62 +150,13 @@ export function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          packageId: appQuery,
+          packageId,
           deviceSerial: selectedSerial || undefined,
         }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "نصب ناموفق");
-      else setAppMsg(data.message ?? "نصب شد");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function openPlayApp() {
-    setBusy(true);
-    setAppMsg(null);
-    setError(null);
-    try {
-      const res = await fetch("/api/apps/open-play", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          packageId: appQuery,
-          deviceSerial: selectedSerial || undefined,
-        }),
-      });
-      const data = await res.json();
-      if (!data.ok) setError(data.message ?? "باز نشد");
-      else setAppMsg(data.message ?? "باز شد");
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function checkPlayApp() {
-    setBusy(true);
-    setAppMsg(null);
-    setError(null);
-    try {
-      const q = new URLSearchParams({
-        packageId: appQuery,
-        ...(selectedSerial ? { deviceSerial: selectedSerial } : {}),
-      });
-      const res = await fetch(`/api/apps/check?${q}`);
-      const data = await res.json();
-      if (!data.ok) setError(data.message ?? "خطا");
-      else {
-        setAppMsg(
-          data.installed
-            ? `${data.packageId} نصب است (${data.versionName ?? "?"})`
-            : `${data.packageId} نصب نیست`,
-        );
-      }
+      if (!data.ok) setError(data.message ?? `نصب ${label} ناموفق`);
+      else setAppMsg(data.message ?? `${label} نصب شد`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -233,6 +167,7 @@ export function App() {
   async function toggleWifi(enabled: boolean) {
     setBusy(true);
     setError(null);
+    setActionMsg(null);
     try {
       const res = await fetch("/api/network/wifi", {
         method: "POST",
@@ -244,7 +179,10 @@ export function App() {
       });
       const data = await res.json();
       if (!data.ok) setError(data.message ?? "خطا");
-      else if (data.status) setNetwork(data.status);
+      else {
+        if (data.status) setNetwork(data.status);
+        setActionMsg(data.message ?? (enabled ? "Wi‑Fi روشن شد" : "Wi‑Fi خاموش شد"));
+      }
       await refresh();
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -298,81 +236,44 @@ export function App() {
     <div className="app">
       <header className="brand">
         <h1>Fixo</h1>
-        <p>
-          دستیار تعمیرات نرم‌افزاری اندروید — شبکه، وای‌فای مغازه، و کنترل دستی روی لینوکس.
-        </p>
+        <p>وای‌فای مغازه و نصب اپ از Play</p>
       </header>
 
       <div className="layout">
         <aside className="panel">
-          <h2>دستگاه و شبکه</h2>
           <div className="status-row">
-            <span>OpenAI</span>
-            <span className={health?.hasOpenAIKey ? "pill on" : "pill off"}>
-              {health?.hasOpenAIKey ? health.model : "no key"}
+            <span>ADB</span>
+            <span className="pill unknown">{devices.length}</span>
+          </div>
+          <div className="status-row">
+            <span>Wi‑Fi</span>
+            <span className={pillClass(network?.wifiEnabled ?? null)}>
+              {pillLabel(network?.wifiEnabled ?? null)}
             </span>
           </div>
           <div className="status-row">
-            <span>ADB</span>
-            <span className="pill unknown">{devices.length} device</span>
-          </div>
-          <div className="status-row">
-            <span>SSID فعلی</span>
+            <span>شبکه</span>
             <span className="pill unknown">{network?.wifiSsid || "—"}</span>
           </div>
 
-          <div style={{ marginTop: 12 }}>
-            <label className="muted" htmlFor="serial">
-              سریال دستگاه
-            </label>
+          {devices.length > 1 ? (
             <select
-              id="serial"
               value={selectedSerial}
               onChange={(e) => setDeviceSerial(e.target.value)}
-              style={{
-                width: "100%",
-                marginTop: 6,
-                padding: 8,
-                borderRadius: 10,
-                border: "1px solid var(--line)",
-                background: "rgba(0,0,0,0.25)",
-                color: "var(--ink)",
-                font: "inherit",
-              }}
+              className="field"
             >
               <option value="">خودکار</option>
               {devices.map((d) => (
                 <option key={d.serial} value={d.serial}>
-                  {d.serial} ({d.status})
+                  {d.serial}
                 </option>
               ))}
             </select>
-          </div>
+          ) : null}
 
-          <div style={{ marginTop: 16 }}>
-            <div className="status-row">
-              <span>Wi‑Fi</span>
-              <span className={pillClass(network?.wifiEnabled ?? null)}>
-                {pillLabel(network?.wifiEnabled ?? null)}
-              </span>
-            </div>
-            <div className="status-row">
-              <span>دیتای موبایل</span>
-              <span className={pillClass(network?.mobileDataEnabled ?? null)}>
-                {pillLabel(network?.mobileDataEnabled ?? null)}
-              </span>
-            </div>
-            <div className="status-row">
-              <span>حالت هواپیما</span>
-              <span className={pillClass(network?.airplaneMode ?? null)}>
-                {pillLabel(network?.airplaneMode ?? null)}
-              </span>
-            </div>
-          </div>
-
-          <div className="actions" style={{ marginTop: 16 }}>
+          <div className="actions">
             <button type="button" disabled={busy} onClick={() => void toggleWifi(true)}>
-              Wi‑Fi روشن + nibero
+              روشن + {health?.shopWifiSsid || "nibero"}
             </button>
             <button
               type="button"
@@ -380,28 +281,7 @@ export function App() {
               disabled={busy}
               onClick={() => void toggleWifi(false)}
             >
-              Wi‑Fi خاموش
-            </button>
-            <button className="secondary" type="button" onClick={() => void refresh()}>
-              بروزرسانی
-            </button>
-          </div>
-
-          <h2 style={{ marginTop: 22 }}>وای‌فای مغازه</h2>
-          <p className="muted">
-            وقتی Wi‑Fi را روشن کنی (دکمه یا چت)، به {health?.shopWifiSsid || shopSsid} وصل
-            می‌شود. اتصال خودکار با کابل خاموش است.
-          </p>
-          {autoBlocker && autoShopWifi ? <p className="error">{autoBlocker}</p> : null}
-          {autoShopWifi && autoSessions[0] ? (
-            <p className="muted" style={{ marginTop: 8 }}>
-              وضعیت خودکار: {autoSessions[0].phase} — {autoSessions[0].message}
-            </p>
-          ) : null}
-
-          <div className="actions" style={{ marginTop: 10 }}>
-            <button type="button" disabled={busy} onClick={() => void shopWifi("connect")}>
-              فقط وصل به مغازه
+              خاموش
             </button>
             <button
               type="button"
@@ -409,117 +289,65 @@ export function App() {
               disabled={busy}
               onClick={() => void shopWifi("forget")}
             >
-              فراموش کردن شبکه
+              فراموش مغازه
             </button>
           </div>
           {actionMsg ? <p className="muted">{actionMsg}</p> : null}
 
-          <h2 style={{ marginTop: 22 }}>نصب از Google Play</h2>
-          <p className="muted">
-            نام اپ یا packageId (مثل whatsapp یا com.whatsapp). گوشی باید اکانت گوگل و اینترنت
-            داشته باشد.
-          </p>
-          <input
-            value={appQuery}
-            onChange={(e) => setAppQuery(e.target.value)}
-            placeholder="whatsapp"
-            style={{
-              width: "100%",
-              marginTop: 6,
-              marginBottom: 10,
-              padding: 8,
-              borderRadius: 10,
-              border: "1px solid var(--line)",
-              background: "rgba(0,0,0,0.25)",
-              color: "var(--ink)",
-              font: "inherit",
-            }}
-          />
-          <div className="actions">
-            <button type="button" disabled={busy || !appQuery.trim()} onClick={() => void installPlayApp()}>
-              نصب از Play
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy || !appQuery.trim()}
-              onClick={() => void openPlayApp()}
-            >
-              باز کردن صفحه
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy || !appQuery.trim()}
-              onClick={() => void checkPlayApp()}
-            >
-              چک نصب
-            </button>
+          <h2>نصب سریع</h2>
+          <div className="app-grid">
+            {QUICK_APPS.map((app) => (
+              <button
+                key={app.packageId}
+                type="button"
+                className="app-btn"
+                disabled={busy}
+                onClick={() => void installPlayApp(app.packageId, app.label)}
+              >
+                {app.label}
+              </button>
+            ))}
           </div>
           {appMsg ? <p className="muted">{appMsg}</p> : null}
 
-          <h2 style={{ marginTop: 22 }}>تنظیمات برنامه</h2>
-          <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 10 }}>
-            <input
-              type="checkbox"
-              checked={autoShopWifi}
-              onChange={(e) => setAutoShopWifi(e.target.checked)}
-            />
-            اتصال خودکار با وصل/قطع کابل (معمولاً خاموش بماند)
-          </label>
-          <label className="muted" htmlFor="ssid">
-            SSID مغازه
-          </label>
-          <input
-            id="ssid"
-            value={shopSsid}
-            onChange={(e) => setShopSsid(e.target.value)}
-            style={{
-              width: "100%",
-              marginTop: 6,
-              marginBottom: 10,
-              padding: 8,
-              borderRadius: 10,
-              border: "1px solid var(--line)",
-              background: "rgba(0,0,0,0.25)",
-              color: "var(--ink)",
-              font: "inherit",
-            }}
-          />
-          <label className="muted" htmlFor="pass">
-            رمز وای‌فای (هر هفته اینجا عوض کن)
-          </label>
-          <input
-            id="pass"
-            type="password"
-            value={shopPassword}
-            placeholder={health?.hasShopWifiPassword ? "•••••••• (برای تغییر بنویس)" : "رمز را وارد کن"}
-            onChange={(e) => setShopPassword(e.target.value)}
-            style={{
-              width: "100%",
-              marginTop: 6,
-              marginBottom: 10,
-              padding: 8,
-              borderRadius: 10,
-              border: "1px solid var(--line)",
-              background: "rgba(0,0,0,0.25)",
-              color: "var(--ink)",
-              font: "inherit",
-            }}
-          />
-          <button type="button" className="secondary" onClick={() => void saveShopSettings()}>
-            ذخیره تنظیمات
+          <button
+            type="button"
+            className="secondary"
+            style={{ width: "100%", marginTop: 14 }}
+            onClick={() => setShowSettings((v) => !v)}
+          >
+            {showSettings ? "بستن تنظیمات" : "تنظیمات رمز وای‌فای"}
           </button>
-          {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
+
+          {showSettings ? (
+            <div className="settings-box">
+              <input
+                className="field"
+                value={shopSsid}
+                onChange={(e) => setShopSsid(e.target.value)}
+                placeholder="SSID"
+              />
+              <input
+                className="field"
+                type="password"
+                value={shopPassword}
+                onChange={(e) => setShopPassword(e.target.value)}
+                placeholder={
+                  health?.hasShopWifiPassword ? "رمز جدید (اختیاری)" : "رمز وای‌فای مغازه"
+                }
+              />
+              <button type="button" disabled={busy} onClick={() => void saveShopSettings()}>
+                ذخیره
+              </button>
+              {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
+            </div>
+          ) : null}
 
           {error ? <p className="error">{error}</p> : null}
-          <p className="muted" style={{ marginTop: 12 }}>
-            پیش‌نیاز: adb روی PATH و USB debugging فعال باشد.
-          </p>
         </aside>
 
         <section className="panel chat">
-          <h2>گفتگو با Agent</h2>
+          <h2>Agent</h2>
           <div className="messages">
             {messages.map((m, i) => (
               <div key={i} className={`bubble ${m.role}`}>
@@ -530,11 +358,10 @@ export function App() {
 
           {pendingAction ? (
             <div className="confirm">
-              <strong>تأیید عملیات لازم است:</strong>
               <span>{pendingAction.label}</span>
               <div className="actions">
                 <button type="button" disabled={busy} onClick={() => void send(true)}>
-                  تأیید و اجرا
+                  تأیید
                 </button>
                 <button
                   type="button"
@@ -552,7 +379,7 @@ export function App() {
             <textarea
               ref={inputRef}
               value={input}
-              placeholder="مثلاً: به وای‌فای مغازه وصل کن"
+              placeholder="مثلاً: وای‌فای را روشن کن / تلگرام نصب کن"
               onChange={(e) => setInput(e.target.value)}
               onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
               onKeyDown={(e) => {
@@ -562,11 +389,9 @@ export function App() {
                 }
               }}
             />
-            <div className="actions">
-              <button type="button" disabled={busy} onClick={() => void send(false)}>
-                {busy ? "در حال اجرا..." : "ارسال"}
-              </button>
-            </div>
+            <button type="button" disabled={busy} onClick={() => void send(false)}>
+              {busy ? "..." : "ارسال"}
+            </button>
           </div>
         </section>
       </div>

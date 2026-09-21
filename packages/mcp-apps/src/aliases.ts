@@ -8,6 +8,11 @@ export const APP_ALIASES: Record<string, string> = {
   اینستا: "com.instagram.android",
   telegram: "org.telegram.messenger",
   تلگرام: "org.telegram.messenger",
+  v2box: "dev.hexasoftware.v2box",
+  "v2 box": "dev.hexasoftware.v2box",
+  ویتوباکس: "dev.hexasoftware.v2box",
+  "وی تو باکس": "dev.hexasoftware.v2box",
+  "وی‌توباکس": "dev.hexasoftware.v2box",
   chrome: "com.android.chrome",
   کروم: "com.android.chrome",
   youtube: "com.google.android.youtube",
@@ -24,6 +29,14 @@ export const APP_ALIASES: Record<string, string> = {
   اسنپ: "cab.snapp.passenger",
   rubika: "ir.mservices.market",
 };
+
+/** Default one-tap apps shown in Fixo UI */
+export const DEFAULT_SHOP_APPS = [
+  { id: "whatsapp", label: "واتساپ", packageId: "com.whatsapp" },
+  { id: "instagram", label: "اینستا", packageId: "com.instagram.android" },
+  { id: "telegram", label: "تلگرام", packageId: "org.telegram.messenger" },
+  { id: "v2box", label: "وی‌توباکس", packageId: "dev.hexasoftware.v2box" },
+] as const;
 
 export function resolvePackageId(input: string): {
   packageId: string;

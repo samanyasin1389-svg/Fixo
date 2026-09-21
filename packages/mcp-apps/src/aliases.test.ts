@@ -10,5 +10,6 @@ describe("resolvePackageId", () => {
   it("resolves aliases", () => {
     assert.equal(resolvePackageId("whatsapp").packageId, "com.whatsapp");
     assert.equal(resolvePackageId("تلگرام").packageId, "org.telegram.messenger");
+    assert.equal(resolvePackageId("وی تو باکس").packageId, "dev.hexasoftware.v2box");
   });
 });

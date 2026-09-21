@@ -1,4 +1,4 @@
-export { APP_ALIASES, resolvePackageId } from "./aliases.js";
+export { APP_ALIASES, DEFAULT_SHOP_APPS, resolvePackageId } from "./aliases.js";
 export {
   checkAppInstalled,
   openPlayListing,
