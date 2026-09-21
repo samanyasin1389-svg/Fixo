@@ -422,11 +422,15 @@ export async function handleChat(input: {
     }),
     install_app: tool({
       description:
-        "Install an app with cascade (Play → local APK → GitHub → URL). Use source=auto unless technician named a source. No Fixo confirmation after they chose source in UI; when chatting, default source=auto. Ask verbally if Play account is ready only if unclear.",
+        "Install an app with cascade. playReady=false skips Google Play. source=model_search opens laptop browser with phone-model APK search (technician downloads manually). Default cascade with Play: Play → model_search → local APK → GitHub → URL. Without Play: model_search → local → GitHub → URL.",
       parameters: z.object({
         packageId: z.string(),
-        source: z.enum(["auto", "play", "local_apk", "github", "url"]).default("auto"),
+        source: z
+          .enum(["auto", "play", "model_search", "local_apk", "github", "url"])
+          .default("auto"),
+        playReady: z.boolean().default(true),
         fallback: z.boolean().default(true),
+        appLabel: z.string().optional(),
         localApkPath: z.string().optional(),
         githubRepo: z.string().optional(),
         apkUrl: z.string().optional(),
@@ -440,19 +444,23 @@ export async function handleChat(input: {
         );
         const result = await installAppCascade(input.adb, serial, resolved.packageId, {
           source: args.source,
+          playReady: args.playReady,
           fallback: args.fallback,
+          appLabel: args.appLabel,
           localApkPath: args.localApkPath,
           githubRepo: args.githubRepo,
           apkUrl: args.apkUrl,
         });
         return toolJson({
-          ok: result.installed,
+          ok: result.installed || Boolean(result.browserOpened),
           deviceSerial: serial,
           ...result,
           evidence: [...evidence, ...result.evidence],
           message: result.installed
             ? `${result.packageId} از ${result.usedSource} نصب شد`
-            : `نصب ${result.packageId} کامل نشد`,
+            : result.browserOpened
+              ? "جستجو در مرورگر باز شد؛ APK را دانلود کنید و با مسیر محلی یا لینک نصب کنید"
+              : `نصب ${result.packageId} کامل نشد`,
         });
       },
     }),
@@ -502,8 +510,7 @@ export async function handleChat(input: {
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
 ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
-اگر گفت اپی را نصب کن: اگر منبع نگفت از install_app با source=auto و fallback=true استفاده کن (Play→APK محلی→GitHub→URL). اگر گفت فقط پلی / فقط APK / از گیت‌هاب، همان source را بگذار و fallback را روشن بگذار مگر صریحاً بگوید فقط همان.
-قبل از نصب اگر معلوم نیست، یک جمله بپرس: «اکانت پلی آماده‌ست؟» — بعد نصب را اجرا کن؛ تأیید اضافی Fixo لازم نیست.
+اگر گفت اپی را نصب کن: اول اگر معلوم نیست بپرس «اکانت پلی آماده‌ست؟». اگر بله → install_app با playReady=true و source=auto. اگر خیر → playReady=false (پلی را صدا نزن). زنجیره با پلی: Play→جستجوی مدل→APK محلی→GitHub→لینک. بدون پلی: جستجوی مدل→APK→GitHub→لینک. جستجوی مدل فقط مرورگر لپ‌تاپ را باز می‌کند.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت ننویس.`;
 

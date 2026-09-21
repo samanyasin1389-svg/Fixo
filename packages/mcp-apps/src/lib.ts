@@ -25,6 +25,10 @@ export {
 } from "./catalog.js";
 export {
   installAppCascade,
+  openModelSearch,
+  openLaptopBrowser,
+  buildModelSearchUrl,
+  getInstallSourceOptions,
   INSTALL_SOURCE_OPTIONS,
   type InstallSourceChoice,
   type InstallCascadeOptions,

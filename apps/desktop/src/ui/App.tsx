@@ -25,7 +25,13 @@ type CatalogApp = {
   pinned?: boolean;
 };
 
-type InstallSource = "auto" | "play" | "local_apk" | "github" | "url";
+type InstallSource =
+  | "auto"
+  | "play"
+  | "model_search"
+  | "local_apk"
+  | "github"
+  | "url";
 
 type BackupJob = {
   jobId: string;
@@ -37,11 +43,13 @@ type BackupJob = {
   currentTarget?: string;
 };
 
-const SOURCE_OPTIONS: Array<{ id: InstallSource; label: string }> = [
+const SOURCE_OPTIONS_ALL: Array<{ id: InstallSource; label: string }> = [
   { id: "auto", label: "خودکار (پیشنهادی)" },
   { id: "play", label: "گوگل پلی" },
+  { id: "model_search", label: "جستجوی مدل‌محور" },
   { id: "local_apk", label: "فایل APK روی لپ‌تاپ" },
-  { id: "github", label: "گیت‌هاب / لینک مستقیم" },
+  { id: "github", label: "گیت‌هاب" },
+  { id: "url", label: "لینک مستقیم" },
 ];
 
 function pillClass(v: boolean | null) {
@@ -81,6 +89,7 @@ export function App() {
     apkUrl: "",
   });
   const [installStep, setInstallStep] = useState<null | "playAsk" | "source">(null);
+  const [playReady, setPlayReady] = useState(true);
   const [pendingPackages, setPendingPackages] = useState<CatalogApp[]>([]);
   const [installSource, setInstallSource] = useState<InstallSource>("auto");
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
@@ -209,10 +218,25 @@ export function App() {
     if (!apps.length) return;
     setPendingPackages(apps);
     setInstallSource("auto");
+    setPlayReady(true);
     setInstallStep("playAsk");
     setAppMsg(null);
     setError(null);
   }
+
+  function answerPlayReady(ready: boolean) {
+    setPlayReady(ready);
+    setInstallSource("auto");
+    setInstallStep("source");
+  }
+
+  const visibleSources = useMemo(
+    () =>
+      playReady
+        ? SOURCE_OPTIONS_ALL
+        : SOURCE_OPTIONS_ALL.filter((o) => o.id !== "play"),
+    [playReady],
+  );
 
   function toggleAppSelect(packageId: string) {
     setSelectedApps((prev) =>
@@ -228,26 +252,32 @@ export function App() {
     const notes: string[] = [];
     try {
       for (const app of pendingPackages) {
-        const mappedSource: InstallSource =
-          source === "github" && !app.sources.githubRepo && app.sources.apkUrl
-            ? "url"
-            : source;
+        let mappedSource: InstallSource = source;
+        if (source === "github" && !app.sources.githubRepo && app.sources.apkUrl) {
+          mappedSource = "url";
+        }
         const res = await fetch("/api/apps/install", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             packageId: app.packageId,
+            appLabel: app.label,
             source: mappedSource,
+            playReady,
             fallback: true,
             deviceSerial: selectedSerial || undefined,
           }),
         });
         const data = await res.json();
-        notes.push(
-          data.ok
-            ? `${app.label}: نصب شد (${data.usedSource ?? source})`
-            : `${app.label}: ${data.message ?? "ناموفق"}`,
-        );
+        if (data.browserOpened && !data.installed) {
+          notes.push(`${app.label}: جستجو باز شد — APK را دانلود کنید`);
+        } else {
+          notes.push(
+            data.installed
+              ? `${app.label}: نصب شد (${data.usedSource ?? source})`
+              : `${app.label}: ${data.message ?? "ناموفق"}`,
+          );
+        }
       }
       setAppMsg(notes.join(" · "));
       setSelectedApps([]);
@@ -401,7 +431,7 @@ export function App() {
     <div className="app">
       <header className="brand">
         <h1>Fixo</h1>
-        <p>وای‌فای مغازه، نصب برنامه، بک‌آپ گوشی</p>
+        <p>همراه تعمیرکار؛ شبکه مغازه، نصب اپ و بک‌آپ گوشی مشتری.</p>
       </header>
 
       <div className="layout">
@@ -573,19 +603,15 @@ export function App() {
             <div className="choice-box">
               <p>اکانت پلی روی گوشی آماده‌ست؟</p>
               <div className="actions">
-                <button type="button" onClick={() => setInstallStep("source")}>
+                <button type="button" onClick={() => answerPlayReady(true)}>
                   بله
                 </button>
                 <button
                   type="button"
                   className="secondary"
-                  onClick={() => {
-                    setInstallStep(null);
-                    setPendingPackages([]);
-                    setAppMsg("نصب لغو شد — اول اکانت پلی را آماده کنید.");
-                  }}
+                  onClick={() => answerPlayReady(false)}
                 >
-                  بعداً
+                  خیر
                 </button>
               </div>
             </div>
@@ -593,9 +619,14 @@ export function App() {
 
           {installStep === "source" ? (
             <div className="choice-box">
-              <p>از کجا نصب کنم؟</p>
+              <p>
+                از کجا نصب کنم؟
+                {!playReady ? (
+                  <span className="muted"> (بدون گوگل پلی)</span>
+                ) : null}
+              </p>
               <div className="source-list">
-                {SOURCE_OPTIONS.map((opt) => (
+                {visibleSources.map((opt) => (
                   <button
                     key={opt.id}
                     type="button"
