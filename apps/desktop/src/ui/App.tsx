@@ -40,6 +40,10 @@ export function App() {
   } | null>(null);
   const [shopSsid, setShopSsid] = useState("nibero");
   const [shopPassword, setShopPassword] = useState("");
+  const [autoShopWifi, setAutoShopWifi] = useState(true);
+  const [autoSessions, setAutoSessions] = useState<
+    Array<{ usbSerial: string; phase: string; message: string; wirelessSerial?: string }>
+  >([]);
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
@@ -63,13 +67,18 @@ export function App() {
   async function refresh() {
     setError(null);
     try {
-      const [h, d, s] = await Promise.all([
+      const [h, d, s, a] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         fetch("/api/devices").then((r) => r.json()),
         fetch("/api/settings").then((r) => r.json()),
+        fetch("/api/auto-wifi/sessions").then((r) => r.json()),
       ]);
       setHealth(h);
       if (s.ok && s.settings?.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
+      if (s.ok && typeof s.settings?.autoShopWifi === "boolean") {
+        setAutoShopWifi(s.settings.autoShopWifi);
+      }
+      if (a.ok) setAutoSessions(a.sessions ?? []);
       if (d.ok) setDevices(d.devices ?? []);
       else setError(d.message ?? "خطا در خواندن دستگاه‌ها");
 
@@ -104,6 +113,7 @@ export function App() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         shopWifiSsid: shopSsid,
+        autoShopWifi,
         ...(shopPassword ? { shopWifiPassword: shopPassword } : {}),
       }),
     });
@@ -299,14 +309,32 @@ export function App() {
             </button>
           </div>
 
-          <h2 style={{ marginTop: 22 }}>وای‌فای مغازه</h2>
+          <h2 style={{ marginTop: 22 }}>وای‌فای مغازه (خودکار)</h2>
           <p className="muted">
-            شبکه تنظیم‌شده: {health?.shopWifiSsid || shopSsid}{" "}
-            {health?.hasShopWifiPassword ? "(رمز ذخیره شده)" : "(رمز ندارد)"}
+            با وصل کابل: Wi‑Fi روشن + وصل به {health?.shopWifiSsid || shopSsid}. با قطع کابل:
+            فراموش شبکه (از طریق ADB بی‌سیم).
           </p>
-          <div className="actions">
+          <label className="muted" style={{ display: "flex", gap: 8, alignItems: "center" }}>
+            <input
+              type="checkbox"
+              checked={autoShopWifi}
+              onChange={(e) => setAutoShopWifi(e.target.checked)}
+            />
+            اتصال/فراموشی خودکار فعال باشد
+          </label>
+          {autoSessions[0] ? (
+            <p className="muted" style={{ marginTop: 8 }}>
+              وضعیت: {autoSessions[0].phase} — {autoSessions[0].message}
+            </p>
+          ) : (
+            <p className="muted" style={{ marginTop: 8 }}>
+              هنوز نشست خودکاری نیست. گوشی را وصل کن.
+            </p>
+          )}
+
+          <div className="actions" style={{ marginTop: 10 }}>
             <button type="button" disabled={busy} onClick={() => void shopWifi("connect")}>
-              وصل به وای‌فای مغازه
+              وصل دستی
             </button>
             <button
               type="button"
@@ -314,7 +342,7 @@ export function App() {
               disabled={busy}
               onClick={() => void shopWifi("forget")}
             >
-              فراموش کردن شبکه
+              فراموش دستی
             </button>
           </div>
           {actionMsg ? <p className="muted">{actionMsg}</p> : null}

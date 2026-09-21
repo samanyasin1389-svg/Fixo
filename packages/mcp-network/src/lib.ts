@@ -24,3 +24,9 @@ export {
   detectOem,
   readWifiSsid,
 } from "./wifi.js";
+
+export {
+  getWifiIpv4,
+  enableWirelessAdb,
+  disconnectWirelessAdb,
+} from "./wireless.js";

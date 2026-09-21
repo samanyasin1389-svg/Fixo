@@ -6,12 +6,14 @@ export type FixoSettings = {
   shopWifiSsid: string;
   shopWifiPassword: string;
   openaiModel?: string;
+  autoShopWifi?: boolean;
 };
 
 const DEFAULTS: FixoSettings = {
   shopWifiSsid: "nibero",
   shopWifiPassword: "",
   openaiModel: "gpt-4.1",
+  autoShopWifi: true,
 };
 
 function settingsPath() {
@@ -31,12 +33,19 @@ export async function loadSettings(): Promise<FixoSettings> {
         parsed.shopWifiPassword ||
         process.env.SHOP_WIFI_PASSWORD ||
         DEFAULTS.shopWifiPassword,
+      autoShopWifi:
+        typeof parsed.autoShopWifi === "boolean"
+          ? parsed.autoShopWifi
+          : process.env.AUTO_SHOP_WIFI === "0"
+            ? false
+            : DEFAULTS.autoShopWifi,
     };
   } catch {
     return {
       ...DEFAULTS,
       shopWifiSsid: process.env.SHOP_WIFI_SSID || DEFAULTS.shopWifiSsid,
       shopWifiPassword: process.env.SHOP_WIFI_PASSWORD || DEFAULTS.shopWifiPassword,
+      autoShopWifi: process.env.AUTO_SHOP_WIFI === "0" ? false : DEFAULTS.autoShopWifi,
     };
   }
 }
@@ -58,5 +67,6 @@ export function publicSettings(settings: FixoSettings) {
     shopWifiSsid: settings.shopWifiSsid,
     hasShopWifiPassword: Boolean(settings.shopWifiPassword),
     openaiModel: settings.openaiModel,
+    autoShopWifi: settings.autoShopWifi !== false,
   };
 }

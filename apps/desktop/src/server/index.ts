@@ -13,6 +13,7 @@ import {
   setWifi,
 } from "@fixo/mcp-network";
 import { handleChat } from "../agent/chat.js";
+import { ShopWifiAutoManager } from "./autoShopWifi.js";
 import { loadSettings, publicSettings, saveSettings } from "./settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -22,6 +23,8 @@ dotenv.config();
 
 const PORT = Number(process.env.PORT ?? 8787);
 const adb = createSystemAdb();
+const autoWifi = new ShopWifiAutoManager(adb);
+autoWifi.start(2000);
 
 const app = express();
 app.use(cors());
@@ -35,7 +38,12 @@ app.get("/api/health", async (_req, res) => {
     model: process.env.OPENAI_MODEL ?? settings.openaiModel ?? "gpt-4.1",
     shopWifiSsid: settings.shopWifiSsid,
     hasShopWifiPassword: Boolean(settings.shopWifiPassword),
+    autoShopWifi: settings.autoShopWifi !== false,
   });
+});
+
+app.get("/api/auto-wifi/sessions", (_req, res) => {
+  res.json({ ok: true, sessions: autoWifi.getSessions() });
 });
 
 app.get("/api/settings", async (_req, res) => {
@@ -45,11 +53,12 @@ app.get("/api/settings", async (_req, res) => {
 
 app.put("/api/settings", async (req, res) => {
   try {
-    const { shopWifiSsid, shopWifiPassword, openaiModel } = req.body ?? {};
+    const { shopWifiSsid, shopWifiPassword, openaiModel, autoShopWifi } = req.body ?? {};
     const saved = await saveSettings({
       ...(typeof shopWifiSsid === "string" ? { shopWifiSsid } : {}),
       ...(typeof shopWifiPassword === "string" ? { shopWifiPassword } : {}),
       ...(typeof openaiModel === "string" ? { openaiModel } : {}),
+      ...(typeof autoShopWifi === "boolean" ? { autoShopWifi } : {}),
     });
     res.json({ ok: true, settings: publicSettings(saved) });
   } catch (err) {
