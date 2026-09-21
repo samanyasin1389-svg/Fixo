@@ -1,23 +1,34 @@
+import { spawn } from "node:child_process";
 import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import { AdbError, type AdbRunner } from "@fixo/mcp-network";
+import { AdbError, getDeviceInfo, type AdbRunner } from "@fixo/mcp-network";
 import { resolvePackageId } from "./aliases.js";
 import { findCatalogApp, type CatalogApp } from "./catalog.js";
 import { checkAppInstalled, installFromPlay } from "./play.js";
 
-export type InstallSourceChoice = "auto" | "play" | "local_apk" | "github" | "url";
+export type InstallSourceChoice =
+  | "auto"
+  | "play"
+  | "model_search"
+  | "local_apk"
+  | "github"
+  | "url";
 
 export type InstallCascadeOptions = {
-  /** Where to start. Default auto = Play → local → GitHub → URL */
+  /** Where to start. Default auto follows playReady cascade. */
   source?: InstallSourceChoice;
   /** After preferred source fails, continue the rest of the chain. Default true */
   fallback?: boolean;
+  /** When false, Play is removed from the queue entirely. Default true */
+  playReady?: boolean;
   timeoutMs?: number;
   /** Optional override paths/urls if not in catalog */
   localApkPath?: string;
   githubRepo?: string;
   apkUrl?: string;
+  /** Display name for search query */
+  appLabel?: string;
 };
 
 export type InstallAttempt = {
@@ -25,6 +36,7 @@ export type InstallAttempt = {
   ok: boolean;
   message: string;
   strategy?: string;
+  searchUrl?: string;
 };
 
 export type InstallCascadeResult = {
@@ -34,10 +46,23 @@ export type InstallCascadeResult = {
   versionName?: string;
   attempts: InstallAttempt[];
   evidence: string[];
+  searchUrl?: string;
+  /** True when browser was opened for technician download (not a completed install) */
+  browserOpened?: boolean;
 };
 
-const SOURCE_ORDER: Array<Exclude<InstallSourceChoice, "auto">> = [
+/** With Play: Play → model search → local → GitHub → URL */
+const SOURCE_ORDER_WITH_PLAY: Array<Exclude<InstallSourceChoice, "auto">> = [
   "play",
+  "model_search",
+  "local_apk",
+  "github",
+  "url",
+];
+
+/** Without Play: model search → local → GitHub → URL */
+const SOURCE_ORDER_NO_PLAY: Array<Exclude<InstallSourceChoice, "auto">> = [
+  "model_search",
   "local_apk",
   "github",
   "url",
@@ -49,6 +74,78 @@ function sleep(ms: number) {
 
 function tmpDir() {
   return path.join(os.tmpdir(), "fixo-apks");
+}
+
+function buildSearchQuery(parts: {
+  label: string;
+  packageId: string;
+  manufacturer?: string;
+  model?: string;
+}) {
+  const device = [parts.manufacturer, parts.model].filter(Boolean).join(" ").trim();
+  const name = parts.label || parts.packageId;
+  return [name, device, "apk download"].filter(Boolean).join(" ").trim();
+}
+
+export function buildModelSearchUrl(query: string) {
+  return `https://duckduckgo.com/?q=${encodeURIComponent(query)}`;
+}
+
+export async function openLaptopBrowser(
+  url: string,
+): Promise<{ ok: boolean; evidence: string }> {
+  const platform = process.platform;
+  let cmd: string;
+  let args: string[];
+  if (platform === "linux") {
+    cmd = "xdg-open";
+    args = [url];
+  } else if (platform === "darwin") {
+    cmd = "open";
+    args = [url];
+  } else if (platform === "win32") {
+    cmd = "cmd";
+    args = ["/c", "start", "", url];
+  } else {
+    return { ok: false, evidence: `unsupported platform for browser open: ${platform}` };
+  }
+
+  return await new Promise((resolve) => {
+    const child = spawn(cmd, args, {
+      detached: true,
+      stdio: "ignore",
+    });
+    child.unref();
+    child.on("error", (err) => {
+      resolve({ ok: false, evidence: `open browser failed: ${err.message}` });
+    });
+    // Assume success if spawn didn't emit error immediately
+    setTimeout(() => {
+      resolve({ ok: true, evidence: `opened browser via ${cmd}: ${url}` });
+    }, 150);
+  });
+}
+
+export async function openModelSearch(
+  adb: AdbRunner,
+  serial: string,
+  opts: { label?: string; packageId: string },
+): Promise<{ ok: boolean; searchUrl: string; query: string; evidence: string[] }> {
+  const evidence: string[] = [];
+  const info = await getDeviceInfo(adb, serial);
+  evidence.push(
+    `device manufacturer=${info.manufacturer ?? "?"} model=${info.model ?? "?"}`,
+  );
+  const query = buildSearchQuery({
+    label: opts.label || opts.packageId,
+    packageId: opts.packageId,
+    manufacturer: info.manufacturer,
+    model: info.model,
+  });
+  const searchUrl = buildModelSearchUrl(query);
+  const opened = await openLaptopBrowser(searchUrl);
+  evidence.push(opened.evidence);
+  return { ok: opened.ok, searchUrl, query, evidence };
 }
 
 async function downloadToFile(url: string, dest: string, evidence: string[]) {
@@ -119,13 +216,22 @@ async function resolveGithubApkUrl(repo: string, evidence: string[]): Promise<st
   return apk.browser_download_url;
 }
 
+function sourceOrder(playReady: boolean): Array<Exclude<InstallSourceChoice, "auto">> {
+  return playReady ? [...SOURCE_ORDER_WITH_PLAY] : [...SOURCE_ORDER_NO_PLAY];
+}
+
 function buildSourceQueue(
   preferred: InstallSourceChoice,
   fallback: boolean,
+  playReady: boolean,
 ): Array<Exclude<InstallSourceChoice, "auto">> {
-  if (preferred === "auto") return [...SOURCE_ORDER];
+  const order = sourceOrder(playReady);
+  if (preferred === "auto") return order;
+  if (preferred === "play" && !playReady) {
+    return fallback ? order : [];
+  }
   if (!fallback) return [preferred];
-  const rest = SOURCE_ORDER.filter((s) => s !== preferred);
+  const rest = order.filter((s) => s !== preferred);
   return [preferred, ...rest];
 }
 
@@ -133,8 +239,10 @@ function hasSourceConfigured(
   source: Exclude<InstallSourceChoice, "auto">,
   app: CatalogApp | undefined,
   options: InstallCascadeOptions,
+  playReady: boolean,
 ): boolean {
-  if (source === "play") return app?.sources.play !== false;
+  if (source === "play") return playReady && app?.sources.play !== false;
+  if (source === "model_search") return true;
   if (source === "local_apk") {
     return Boolean(options.localApkPath || app?.sources.localApkPath);
   }
@@ -160,12 +268,15 @@ export async function installAppCascade(
   const catalogApp = await findCatalogApp(packageId);
   const preferred = options.source ?? "auto";
   const fallback = options.fallback !== false;
-  const queue = buildSourceQueue(preferred, fallback).filter((s) =>
-    hasSourceConfigured(s, catalogApp, options),
+  const playReady = options.playReady !== false;
+  const appLabel = options.appLabel || catalogApp?.label || packageId;
+
+  const queue = buildSourceQueue(preferred, fallback, playReady).filter((s) =>
+    hasSourceConfigured(s, catalogApp, options, playReady),
   );
 
   evidence.push(
-    `install cascade package=${packageId} preferred=${preferred} fallback=${fallback} queue=${queue.join(",")}`,
+    `install cascade package=${packageId} preferred=${preferred} playReady=${playReady} fallback=${fallback} queue=${queue.join(",")}`,
   );
 
   const already = await checkAppInstalled(adb, serial, packageId);
@@ -174,11 +285,11 @@ export async function installAppCascade(
     return {
       packageId,
       installed: true,
-      usedSource: "play",
+      usedSource: playReady ? "play" : "local_apk",
       versionName: already.versionName,
       attempts: [
         {
-          source: "play",
+          source: playReady ? "play" : "local_apk",
           ok: true,
           message: "از قبل نصب بود",
           strategy: "already_installed",
@@ -190,13 +301,48 @@ export async function installAppCascade(
 
   if (queue.length === 0) {
     throw new AdbError(
-      `هیچ منبع نصبی برای ${packageId} تنظیم نشده. در کاتالوگ Play/APK/GitHub/URL بگذارید.`,
+      `هیچ منبع نصبی برای ${packageId} تنظیم نشده. در کاتالوگ APK/GitHub/URL بگذارید یا جستجوی مدل را بزنید.`,
       evidence,
     );
   }
 
+  let lastSearchUrl: string | undefined;
+  let browserOpened = false;
+
   for (const source of queue) {
     try {
+      if (source === "model_search") {
+        const search = await openModelSearch(adb, serial, {
+          label: appLabel,
+          packageId,
+        });
+        evidence.push(...search.evidence);
+        lastSearchUrl = search.searchUrl;
+        browserOpened = search.ok;
+        attempts.push({
+          source,
+          ok: search.ok,
+          message: search.ok
+            ? "جستجو در مرورگر باز شد — APK را دانلود کنید"
+            : "باز کردن مرورگر ناموفق بود",
+          strategy: "xdg_open_search",
+          searchUrl: search.searchUrl,
+        });
+        // model_search never completes install; continue cascade if fallback
+        if (preferred === "model_search" && !fallback) {
+          return {
+            packageId,
+            installed: false,
+            usedSource: source,
+            attempts,
+            evidence,
+            searchUrl: search.searchUrl,
+            browserOpened: search.ok,
+          };
+        }
+        continue;
+      }
+
       if (source === "play") {
         try {
           const result = await installFromPlay(adb, serial, packageId, {
@@ -217,6 +363,8 @@ export async function installAppCascade(
               versionName: result.versionName,
               attempts,
               evidence,
+              searchUrl: lastSearchUrl,
+              browserOpened,
             };
           }
         } catch (err) {
@@ -256,6 +404,8 @@ export async function installAppCascade(
             versionName: check.versionName,
             attempts,
             evidence,
+            searchUrl: lastSearchUrl,
+            browserOpened,
           };
         }
         continue;
@@ -308,6 +458,8 @@ export async function installAppCascade(
             versionName: check.versionName,
             attempts,
             evidence,
+            searchUrl: lastSearchUrl,
+            browserOpened,
           };
         }
         continue;
@@ -325,16 +477,36 @@ export async function installAppCascade(
     installed: false,
     attempts,
     evidence,
+    searchUrl: lastSearchUrl,
+    browserOpened,
   };
 }
 
-export const INSTALL_SOURCE_OPTIONS: Array<{
+export function getInstallSourceOptions(playReady = true): Array<{
   id: InstallSourceChoice;
   label: string;
   hint: string;
-}> = [
-  { id: "auto", label: "خودکار (پیشنهادی)", hint: "پلی، بعد APK، بعد گیت‌هاب، بعد لینک" },
-  { id: "play", label: "گوگل پلی", hint: "اول از فروشگاه پلی" },
-  { id: "local_apk", label: "فایل APK روی لپ‌تاپ", hint: "مسیر فایل محلی در کاتالوگ" },
-  { id: "github", label: "گیت‌هاب / لینک مستقیم", hint: "ریلیز گیت‌هاب یا URL مستقیم" },
-];
+}> {
+  const all: Array<{ id: InstallSourceChoice; label: string; hint: string }> = [
+    {
+      id: "auto",
+      label: "خودکار (پیشنهادی)",
+      hint: playReady
+        ? "پلی، بعد جستجوی مدل، APK، گیت‌هاب، لینک"
+        : "جستجوی مدل، بعد APK، گیت‌هاب، لینک",
+    },
+    { id: "play", label: "گوگل پلی", hint: "اول از فروشگاه پلی" },
+    {
+      id: "model_search",
+      label: "جستجوی مدل‌محور",
+      hint: "مدل گوشی را می‌گیرد و جستجو را در مرورگر باز می‌کند",
+    },
+    { id: "local_apk", label: "فایل APK روی لپ‌تاپ", hint: "مسیر فایل محلی در کاتالوگ" },
+    { id: "github", label: "گیت‌هاب", hint: "ریلیز گیت‌هاب" },
+    { id: "url", label: "لینک مستقیم", hint: "URL مستقیم APK" },
+  ];
+  return playReady ? all : all.filter((o) => o.id !== "play");
+}
+
+/** @deprecated use getInstallSourceOptions(playReady) */
+export const INSTALL_SOURCE_OPTIONS = getInstallSourceOptions(true);

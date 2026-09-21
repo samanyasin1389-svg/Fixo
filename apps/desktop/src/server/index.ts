@@ -312,15 +312,16 @@ app.post("/api/apps/install-play", async (req, res) => {
   }
 });
 
-app.get("/api/apps/catalog", async (_req, res) => {
+app.get("/api/apps/catalog", async (req, res) => {
   try {
-    const { listCatalogApps, INSTALL_SOURCE_OPTIONS, catalogFilePath } =
+    const { listCatalogApps, getInstallSourceOptions, catalogFilePath } =
       await import("@fixo/mcp-apps");
+    const playReady = req.query.playReady !== "0" && req.query.playReady !== "false";
     const apps = await listCatalogApps();
     res.json({
       ok: true,
       apps,
-      sources: INSTALL_SOURCE_OPTIONS,
+      sources: getInstallSourceOptions(playReady),
       catalogPath: catalogFilePath(),
     });
   } catch (err) {
@@ -362,6 +363,39 @@ app.post("/api/apps/catalog", async (req, res) => {
   }
 });
 
+app.post("/api/apps/open-search", async (req, res) => {
+  try {
+    const packageId = String(req.body?.packageId ?? "");
+    const appLabel =
+      typeof req.body?.appLabel === "string" ? req.body.appLabel : undefined;
+    if (!packageId) {
+      res.status(400).json({ ok: false, message: "packageId required" });
+      return;
+    }
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const { openModelSearch } = await import("@fixo/mcp-apps");
+    const result = await openModelSearch(adb, serial, {
+      packageId,
+      label: appLabel,
+    });
+    res.json({
+      deviceSerial: serial,
+      ...result,
+      ok: result.ok,
+      message: result.ok
+        ? "جستجو در مرورگر باز شد — APK را دانلود کنید"
+        : "باز کردن مرورگر ناموفق بود",
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/apps/install", async (req, res) => {
   try {
     const packageId = String(req.body?.packageId ?? "");
@@ -374,29 +408,35 @@ app.post("/api/apps/install", async (req, res) => {
     const { serial } = await resolveSerial(adb, serialParam);
     const { installAppCascade } = await import("@fixo/mcp-apps");
     const source = req.body?.source;
+    const allowed = new Set([
+      "auto",
+      "play",
+      "model_search",
+      "local_apk",
+      "github",
+      "url",
+    ]);
     const result = await installAppCascade(adb, serial, packageId, {
-      source:
-        source === "play" ||
-        source === "local_apk" ||
-        source === "github" ||
-        source === "url" ||
-        source === "auto"
-          ? source
-          : "auto",
+      source: allowed.has(source) ? source : "auto",
+      playReady: req.body?.playReady !== false,
       fallback: req.body?.fallback !== false,
+      appLabel: typeof req.body?.appLabel === "string" ? req.body.appLabel : undefined,
       localApkPath:
         typeof req.body?.localApkPath === "string" ? req.body.localApkPath : undefined,
       githubRepo: typeof req.body?.githubRepo === "string" ? req.body.githubRepo : undefined,
       apkUrl: typeof req.body?.apkUrl === "string" ? req.body.apkUrl : undefined,
       timeoutMs: Number(req.body?.timeoutMs) || 90_000,
     });
+    const ok = result.installed || (result.browserOpened && source === "model_search");
     res.json({
-      ok: result.installed,
+      ok,
       deviceSerial: serial,
       ...result,
       message: result.installed
         ? `${result.packageId} از ${result.usedSource ?? "cascade"} نصب شد`
-        : `نصب ${result.packageId} ناموفق بود`,
+        : result.browserOpened
+          ? "جستجو در مرورگر باز شد — بعد از دانلود از APK محلی یا لینک نصب کنید"
+          : `نصب ${result.packageId} ناموفق بود`,
     });
   } catch (err) {
     res.status(500).json({

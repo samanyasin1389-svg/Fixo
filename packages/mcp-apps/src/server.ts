@@ -132,12 +132,16 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
 
   server.tool(
     "install_app",
-    "Install an app with source cascade: Play → local APK → GitHub release → direct URL. Optional preferred source with fallback.",
+    "Install an app with cascade. playReady=false skips Play. Sources: Play → model_search (opens laptop browser) → local APK → GitHub → URL.",
     {
       packageId: z.string(),
       deviceSerial: z.string().optional(),
-      source: z.enum(["auto", "play", "local_apk", "github", "url"]).optional(),
+      source: z
+        .enum(["auto", "play", "model_search", "local_apk", "github", "url"])
+        .optional(),
+      playReady: z.boolean().optional(),
       fallback: z.boolean().optional(),
+      appLabel: z.string().optional(),
       localApkPath: z.string().optional(),
       githubRepo: z.string().optional(),
       apkUrl: z.string().optional(),
@@ -148,18 +152,58 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
         const { serial, evidence } = await resolveSerial(adb, args.deviceSerial);
         const result = await installAppCascade(adb, serial, args.packageId, {
           source: args.source,
+          playReady: args.playReady,
           fallback: args.fallback,
+          appLabel: args.appLabel,
           localApkPath: args.localApkPath,
           githubRepo: args.githubRepo,
           apkUrl: args.apkUrl,
           timeoutMs: args.timeoutMs,
         });
+        const status = result.installed
+          ? "installed"
+          : result.browserOpened
+            ? "browser_opened"
+            : "failed";
         return jsonResult({
           deviceSerial: serial,
-          status: result.installed ? "installed" : "failed",
+          status,
           message: result.installed
             ? `Installed ${result.packageId} via ${result.usedSource}`
-            : `Install failed for ${result.packageId}`,
+            : result.browserOpened
+              ? `Search opened for ${result.packageId}; download APK then install locally`
+              : `Install failed for ${result.packageId}`,
+          data: result,
+          evidence: [...evidence, ...result.evidence],
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "open_model_search",
+    "Read phone model and open a DuckDuckGo APK search in the laptop browser for the technician to download manually.",
+    {
+      packageId: z.string(),
+      appLabel: z.string().optional(),
+      deviceSerial: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        const { openModelSearch } = await import("./install.js");
+        const { serial, evidence } = await resolveSerial(adb, args.deviceSerial);
+        const result = await openModelSearch(adb, serial, {
+          packageId: args.packageId,
+          label: args.appLabel,
+        });
+        return jsonResult({
+          deviceSerial: serial,
+          status: result.ok ? "opened" : "failed",
+          message: result.ok
+            ? "جستجو در مرورگر باز شد"
+            : "باز کردن مرورگر ناموفق بود",
           data: result,
           evidence: [...evidence, ...result.evidence],
         });
