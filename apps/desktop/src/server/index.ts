@@ -69,12 +69,15 @@ app.get("/api/settings", async (_req, res) => {
 
 app.put("/api/settings", async (req, res) => {
   try {
-    const { shopWifiSsid, shopWifiPassword, openaiModel, autoShopWifi } = req.body ?? {};
+    const { shopWifiSsid, shopWifiPassword, openaiModel, autoShopWifi, theme, locale } =
+      req.body ?? {};
     const saved = await saveSettings({
       ...(typeof shopWifiSsid === "string" ? { shopWifiSsid } : {}),
       ...(typeof shopWifiPassword === "string" ? { shopWifiPassword } : {}),
       ...(typeof openaiModel === "string" ? { openaiModel } : {}),
       ...(typeof autoShopWifi === "boolean" ? { autoShopWifi } : {}),
+      ...(theme === "day" || theme === "night" ? { theme } : {}),
+      ...(locale === "fa" || locale === "en" ? { locale } : {}),
     });
     res.json({ ok: true, settings: publicSettings(saved) });
   } catch (err) {
