@@ -61,10 +61,14 @@ pnpm --filter @fixo/mcp-network dev
 |------|-----|
 | `list_devices` | لیست دستگاه‌های ADB |
 | `get_device_info` | مدل و نسخه اندروید |
-| `get_network_status` | وضعیت Wi‑Fi / دیتا / هواپیما |
+| `get_network_status` | وضعیت Wi‑Fi / دیتا / هواپیما / SSID |
 | `set_wifi` | روشن/خاموش Wi‑Fi (نیاز به تأیید) |
 | `set_mobile_data` | روشن/خاموش دیتا (نیاز به تأیید) |
 | `set_airplane_mode` | روشن/خاموش حالت هواپیما (نیاز به تأیید) |
+| `connect_wifi` | وصل به SSID/رمز (Samsung + Xiaomi fallback) |
+| `forget_wifi` | فراموش کردن شبکه ذخیره‌شده |
+
+وای‌فای مغازه از UI یا Agent با تنظیمات محلی (`~/.config/fixo/settings.json` یا `SHOP_WIFI_*` در `.env`) کار می‌کند.
 
 ## امنیت
 

@@ -18,6 +18,7 @@ import {
   setMobileData,
   setWifi,
 } from "./network.js";
+import { connectWifi, forgetWifi } from "./wifi.js";
 
 function jsonResult(result: ToolResult) {
   return {
@@ -240,6 +241,71 @@ export function createNetworkMcpServer(adb: AdbRunner = createSystemAdb()) {
           before: before.status,
           after: after.status,
           evidence: [...e0, ...before.evidence, ...change.evidence, ...after.evidence],
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "connect_wifi",
+    "Connect the phone to a specific Wi-Fi SSID/password. Works across Samsung and Xiaomi via cmd wifi fallbacks. Requires confirmed=true.",
+    {
+      ssid: z.string().min(1),
+      password: z.string().min(1),
+      confirmed: z.boolean().default(false),
+      deviceSerial: z.string().optional(),
+    },
+    async ({ ssid, password, confirmed, deviceSerial }) => {
+      try {
+        assertConfirmed(confirmed, `connecting to Wi-Fi ${ssid}`);
+        const { serial, evidence: e0 } = await resolveSerial(adb, deviceSerial);
+        const before = await getNetworkStatus(adb, serial);
+        const result = await connectWifi(adb, serial, ssid, password);
+        const after = await getNetworkStatus(adb, serial);
+        return jsonResult({
+          ok: result.connected,
+          deviceSerial: serial,
+          status: result.connected ? "connected" : "uncertain",
+          message: result.connected
+            ? `Connected to Wi-Fi ${result.wifiSsid} via ${result.strategy}`
+            : `Connect attempted via ${result.strategy}`,
+          before: before.status,
+          after: after.status,
+          evidence: [...e0, ...before.evidence, ...result.evidence, ...after.evidence],
+          data: { strategy: result.strategy, wifiSsid: result.wifiSsid },
+        });
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
+    "forget_wifi",
+    "Forget a saved Wi-Fi network by SSID (Samsung/Xiaomi via cmd wifi). Requires confirmed=true.",
+    {
+      ssid: z.string().min(1),
+      confirmed: z.boolean().default(false),
+      deviceSerial: z.string().optional(),
+    },
+    async ({ ssid, confirmed, deviceSerial }) => {
+      try {
+        assertConfirmed(confirmed, `forgetting Wi-Fi ${ssid}`);
+        const { serial, evidence: e0 } = await resolveSerial(adb, deviceSerial);
+        const before = await getNetworkStatus(adb, serial);
+        const result = await forgetWifi(adb, serial, ssid);
+        const after = await getNetworkStatus(adb, serial);
+        return jsonResult({
+          ok: result.forgotten,
+          deviceSerial: serial,
+          status: "forgotten",
+          message: `Forgot Wi-Fi ${ssid} via ${result.strategy}`,
+          before: before.status,
+          after: after.status,
+          evidence: [...e0, ...before.evidence, ...result.evidence, ...after.evidence],
+          data: { strategy: result.strategy },
         });
       } catch (err) {
         return fail(err);

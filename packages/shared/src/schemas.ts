@@ -25,6 +25,8 @@ export const NetworkStatusSchema = z.object({
   mobileDataEnabled: z.boolean().nullable(),
   airplaneMode: z.boolean().nullable(),
   wifiConnected: z.boolean().nullable(),
+  wifiSsid: z.string().nullable().optional(),
+  manufacturer: z.string().nullable().optional(),
   raw: z.record(z.string()).optional(),
 });
 

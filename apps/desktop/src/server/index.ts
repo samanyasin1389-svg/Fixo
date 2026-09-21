@@ -4,12 +4,16 @@ import dotenv from "dotenv";
 import express from "express";
 import cors from "cors";
 import {
+  connectWifi,
   createSystemAdb,
+  forgetWifi,
+  getNetworkStatus,
   listDevices,
   resolveSerial,
-  getNetworkStatus,
+  setWifi,
 } from "@fixo/mcp-network";
 import { handleChat } from "../agent/chat.js";
+import { loadSettings, publicSettings, saveSettings } from "./settings.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const repoRoot = path.resolve(__dirname, "../../../../");
@@ -23,12 +27,37 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: "1mb" }));
 
-app.get("/api/health", (_req, res) => {
+app.get("/api/health", async (_req, res) => {
+  const settings = await loadSettings();
   res.json({
     ok: true,
     hasOpenAIKey: Boolean(process.env.OPENAI_API_KEY),
-    model: process.env.OPENAI_MODEL ?? "gpt-4.1",
+    model: process.env.OPENAI_MODEL ?? settings.openaiModel ?? "gpt-4.1",
+    shopWifiSsid: settings.shopWifiSsid,
+    hasShopWifiPassword: Boolean(settings.shopWifiPassword),
   });
+});
+
+app.get("/api/settings", async (_req, res) => {
+  const settings = await loadSettings();
+  res.json({ ok: true, settings: publicSettings(settings) });
+});
+
+app.put("/api/settings", async (req, res) => {
+  try {
+    const { shopWifiSsid, shopWifiPassword, openaiModel } = req.body ?? {};
+    const saved = await saveSettings({
+      ...(typeof shopWifiSsid === "string" ? { shopWifiSsid } : {}),
+      ...(typeof shopWifiPassword === "string" ? { shopWifiPassword } : {}),
+      ...(typeof openaiModel === "string" ? { openaiModel } : {}),
+    });
+    res.json({ ok: true, settings: publicSettings(saved) });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
 });
 
 app.get("/api/devices", async (_req, res) => {
@@ -58,6 +87,90 @@ app.get("/api/network", async (req, res) => {
   }
 });
 
+app.post("/api/network/wifi", async (req, res) => {
+  try {
+    const enabled = Boolean(req.body?.enabled);
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    await setWifi(adb, serial, enabled);
+    await new Promise((r) => setTimeout(r, 800));
+    const { status, evidence } = await getNetworkStatus(adb, serial);
+    res.json({ ok: true, deviceSerial: serial, status, evidence });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/network/shop-wifi/connect", async (req, res) => {
+  try {
+    const settings = await loadSettings();
+    if (!settings.shopWifiPassword) {
+      res.status(400).json({
+        ok: false,
+        message: "رمز وای‌فای مغازه در تنظیمات برنامه ست نشده است.",
+      });
+      return;
+    }
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const before = await getNetworkStatus(adb, serial);
+    const result = await connectWifi(
+      adb,
+      serial,
+      settings.shopWifiSsid,
+      settings.shopWifiPassword,
+    );
+    const after = await getNetworkStatus(adb, serial);
+    res.json({
+      ok: result.connected,
+      deviceSerial: serial,
+      strategy: result.strategy,
+      before: before.status,
+      after: after.status,
+      evidence: result.evidence,
+      message: result.connected
+        ? `وصل شد به ${result.wifiSsid}`
+        : "تلاش اتصال انجام شد",
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/network/shop-wifi/forget", async (req, res) => {
+  try {
+    const settings = await loadSettings();
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const before = await getNetworkStatus(adb, serial);
+    const result = await forgetWifi(adb, serial, settings.shopWifiSsid);
+    const after = await getNetworkStatus(adb, serial);
+    res.json({
+      ok: result.forgotten,
+      deviceSerial: serial,
+      strategy: result.strategy,
+      before: before.status,
+      after: after.status,
+      evidence: result.evidence,
+      message: `شبکه ${settings.shopWifiSsid} فراموش شد`,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!process.env.OPENAI_API_KEY) {
@@ -72,11 +185,16 @@ app.post("/api/chat", async (req, res) => {
       res.status(400).json({ ok: false, message: "messages array required" });
       return;
     }
+    const settings = await loadSettings();
     const result = await handleChat({
       messages,
       deviceSerial,
       confirmAction: Boolean(confirmAction),
       adb,
+      shopWifi: {
+        ssid: settings.shopWifiSsid,
+        password: settings.shopWifiPassword,
+      },
     });
     res.json({ ok: true, ...result });
   } catch (err) {

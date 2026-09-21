@@ -5,6 +5,8 @@ import type { AdbRunner } from "@fixo/mcp-network";
 import {
   AdbError,
   assertConfirmed,
+  connectWifi,
+  forgetWifi,
   getDeviceInfo,
   getNetworkStatus,
   listDevices,
@@ -20,8 +22,13 @@ export type ChatMessage = {
 };
 
 export type PendingAction = {
-  tool: "set_wifi" | "set_mobile_data" | "set_airplane_mode";
-  enabled: boolean;
+  tool:
+    | "set_wifi"
+    | "set_mobile_data"
+    | "set_airplane_mode"
+    | "connect_shop_wifi"
+    | "forget_shop_wifi";
+  enabled?: boolean;
   deviceSerial?: string;
   label: string;
 };
@@ -39,6 +46,7 @@ export async function handleChat(input: {
   deviceSerial?: string;
   confirmAction?: boolean;
   adb: AdbRunner;
+  shopWifi: { ssid: string; password: string };
 }) {
   const openai = createOpenAI({
     apiKey: process.env.OPENAI_API_KEY,
@@ -71,7 +79,7 @@ export async function handleChat(input: {
       },
     }),
     get_network_status: tool({
-      description: "Read Wi-Fi, mobile data, and airplane mode status.",
+      description: "Read Wi-Fi, mobile data, airplane mode, and current SSID.",
       parameters: z.object({
         deviceSerial: z.string().optional(),
       }),
@@ -96,12 +104,7 @@ export async function handleChat(input: {
         const label = enabled ? "روشن کردن Wi-Fi" : "خاموش کردن Wi-Fi";
         const serialHint = deviceSerial ?? input.deviceSerial;
         if (!confirmed && !input.confirmAction) {
-          pendingAction = {
-            tool: "set_wifi",
-            enabled,
-            deviceSerial: serialHint,
-            label,
-          };
+          pendingAction = { tool: "set_wifi", enabled, deviceSerial: serialHint, label };
           return toolJson({
             ok: false,
             status: "needs_confirmation",
@@ -125,8 +128,7 @@ export async function handleChat(input: {
       },
     }),
     set_mobile_data: tool({
-      description:
-        "Turn mobile data on or off. Requires technician confirmation (confirmed=true).",
+      description: "Turn mobile data on or off. Requires confirmation.",
       parameters: z.object({
         enabled: z.boolean(),
         confirmed: z.boolean().default(false),
@@ -165,8 +167,7 @@ export async function handleChat(input: {
       },
     }),
     set_airplane_mode: tool({
-      description:
-        "Turn airplane mode on or off. Requires technician confirmation (confirmed=true).",
+      description: "Turn airplane mode on or off. Requires confirmation.",
       parameters: z.object({
         enabled: z.boolean(),
         confirmed: z.boolean().default(false),
@@ -204,14 +205,92 @@ export async function handleChat(input: {
         });
       },
     }),
+    connect_shop_wifi: tool({
+      description: `Connect phone to shop Wi-Fi (${input.shopWifi.ssid}). Use when technician asks to connect to shop/company/nibero Wi-Fi. Requires confirmation.`,
+      parameters: z.object({
+        confirmed: z.boolean().default(false),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ confirmed, deviceSerial }) => {
+        const label = `وصل به وای‌فای مغازه (${input.shopWifi.ssid})`;
+        const serialHint = deviceSerial ?? input.deviceSerial;
+        if (!input.shopWifi.password) {
+          return toolJson({
+            ok: false,
+            status: "missing_password",
+            message: "رمز وای‌فای مغازه در تنظیمات برنامه ست نشده است.",
+          });
+        }
+        if (!confirmed && !input.confirmAction) {
+          pendingAction = { tool: "connect_shop_wifi", deviceSerial: serialHint, label };
+          return toolJson({
+            ok: false,
+            status: "needs_confirmation",
+            message: `Confirmation required: ${label}`,
+            pendingAction,
+          });
+        }
+        assertConfirmed(true, label);
+        const { serial, evidence: e0 } = await resolveSerial(input.adb, serialHint);
+        const before = await getNetworkStatus(input.adb, serial);
+        const result = await connectWifi(
+          input.adb,
+          serial,
+          input.shopWifi.ssid,
+          input.shopWifi.password,
+        );
+        const after = await getNetworkStatus(input.adb, serial);
+        return toolJson({
+          ok: result.connected,
+          deviceSerial: serial,
+          strategy: result.strategy,
+          before: before.status,
+          after: after.status,
+          evidence: [...e0, ...before.evidence, ...result.evidence, ...after.evidence],
+        });
+      },
+    }),
+    forget_shop_wifi: tool({
+      description: `Forget shop Wi-Fi (${input.shopWifi.ssid}) so the customer cannot keep using the shop network. Requires confirmation.`,
+      parameters: z.object({
+        confirmed: z.boolean().default(false),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ confirmed, deviceSerial }) => {
+        const label = `فراموش کردن وای‌فای مغازه (${input.shopWifi.ssid})`;
+        const serialHint = deviceSerial ?? input.deviceSerial;
+        if (!confirmed && !input.confirmAction) {
+          pendingAction = { tool: "forget_shop_wifi", deviceSerial: serialHint, label };
+          return toolJson({
+            ok: false,
+            status: "needs_confirmation",
+            message: `Confirmation required: ${label}`,
+            pendingAction,
+          });
+        }
+        assertConfirmed(true, label);
+        const { serial, evidence: e0 } = await resolveSerial(input.adb, serialHint);
+        const before = await getNetworkStatus(input.adb, serial);
+        const result = await forgetWifi(input.adb, serial, input.shopWifi.ssid);
+        const after = await getNetworkStatus(input.adb, serial);
+        return toolJson({
+          ok: result.forgotten,
+          deviceSerial: serial,
+          strategy: result.strategy,
+          before: before.status,
+          after: after.status,
+          evidence: [...e0, ...before.evidence, ...result.evidence, ...after.evidence],
+        });
+      },
+    }),
   };
 
-  const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه تعمیرات.
-فقط با ابزارهای موجود کار کن: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode.
-فاز فعلی فقط خاموش/روشن کردن اینترنت گوشی است (Wi-Fi، دیتای موبایل، حالت هواپیما).
-قبل از هر تغییر شبکه، اول وضعیت را بخوان. برای تغییر، اول با confirmed=false صدا بزن تا تأیید تعمیرکار گرفته شود؛ بعد از تأیید با confirmed=true اجرا کن.
-جواب‌ها را کوتاه و به فارسی بده. اگر دستگاه وصل نیست، واضح بگو.
-اگر کاربر گفت «اینترنت را خاموش کن» معمولاً Wi-Fi و در صورت نیاز دیتا/هواپیما را مدیریت کن؛ از کاربر دقیق بپرس اگر مبهم بود.`;
+  const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi.
+وای‌فای مغازه: SSID=${input.shopWifi.ssid}. اگر گفت به اینترنت شرکت/مغازه/nibero وصل کن از connect_shop_wifi استفاده کن.
+اگر گفت شبکه مغازه را فراموش کن از forget_shop_wifi استفاده کن.
+قبل از تغییر، وضعیت را بخوان. برای تغییر اول confirmed=false؛ بعد از تأیید confirmed=true.
+جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت در جواب ننویس.`;
 
   let messages = input.messages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",
@@ -224,7 +303,7 @@ export async function handleChat(input: {
       {
         role: "user" as const,
         content:
-          "تعمیرکار عملیات پیشنهادی را تأیید کرد. همان تغییر شبکه را الان با confirmed=true اجرا کن و نتیجه نهایی را بگو.",
+          "تعمیرکار عملیات پیشنهادی را تأیید کرد. همان کار شبکه را الان با confirmed=true اجرا کن و نتیجه نهایی را بگو.",
       },
     ];
   }
@@ -235,7 +314,7 @@ export async function handleChat(input: {
       system,
       messages,
       tools,
-      maxSteps: 6,
+      maxSteps: 8,
     });
 
     return {

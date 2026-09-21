@@ -17,3 +17,10 @@ export {
   getDeviceInfo,
   assertConfirmed,
 } from "./network.js";
+
+export {
+  connectWifi,
+  forgetWifi,
+  detectOem,
+  readWifiSsid,
+} from "./wifi.js";

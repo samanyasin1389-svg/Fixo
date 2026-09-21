@@ -48,16 +48,45 @@ export async function getNetworkStatus(
   if (/CONNECTED/i.test(ipCmd.stdout)) wifiConnected = true;
   else if (/DISCONNECTED|IDLE|SCANNING/i.test(ipCmd.stdout)) wifiConnected = false;
 
+  let wifiSsid: string | null = null;
+  const statusCmd = await shell(adb, serial, "cmd wifi status");
+  evidence.push(statusCmd.evidence);
+  const statusMatch = statusCmd.stdout.match(/Wifi is connected to "([^"]+)"/i);
+  if (statusMatch?.[1] && statusMatch[1] !== "<unknown ssid>") {
+    wifiSsid = statusMatch[1];
+    wifiConnected = true;
+  } else {
+    const ssidCmd = await shell(
+      adb,
+      serial,
+      "dumpsys wifi | grep -E 'SSID:' | head -n 8",
+    );
+    evidence.push(ssidCmd.evidence);
+    const matches = [...ssidCmd.stdout.matchAll(/SSID:\s*"?([^,"\n]+)"?/gi)];
+    for (const m of matches) {
+      const candidate = m[1]?.trim();
+      if (candidate && candidate !== "<unknown ssid>" && candidate !== "0x") {
+        wifiSsid = candidate;
+        break;
+      }
+    }
+  }
+
+  const manufacturer = (await getprop(adb, serial, "ro.product.manufacturer")) ?? null;
+
   return {
     status: {
       wifiEnabled,
       mobileDataEnabled,
       airplaneMode,
       wifiConnected,
+      wifiSsid,
+      manufacturer,
       raw: {
         wifi_on: wifiCmd.stdout.trim(),
         mobile_data: dataCmd.stdout.trim(),
         airplane_mode_on: airplaneCmd.stdout.trim(),
+        wifi_status: statusCmd.stdout.trim().slice(0, 500),
       },
     },
     evidence,

@@ -9,10 +9,11 @@ type NetworkStatus = {
   mobileDataEnabled: boolean | null;
   airplaneMode: boolean | null;
   wifiConnected: boolean | null;
+  wifiSsid?: string | null;
 };
 type PendingAction = {
   tool: string;
-  enabled: boolean;
+  enabled?: boolean;
   deviceSerial?: string;
   label: string;
 };
@@ -31,14 +32,20 @@ export function App() {
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceSerial, setDeviceSerial] = useState<string>("");
   const [network, setNetwork] = useState<NetworkStatus | null>(null);
-  const [health, setHealth] = useState<{ hasOpenAIKey: boolean; model: string } | null>(
-    null,
-  );
+  const [health, setHealth] = useState<{
+    hasOpenAIKey: boolean;
+    model: string;
+    shopWifiSsid?: string;
+    hasShopWifiPassword?: boolean;
+  } | null>(null);
+  const [shopSsid, setShopSsid] = useState("nibero");
+  const [shopPassword, setShopPassword] = useState("");
+  const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const [messages, setMessages] = useState<Msg[]>([
     {
       role: "assistant",
       content:
-        "سلام. گوشی را با USB وصل کن و بگو اینترنت را خاموش یا روشن کنم (Wi‑Fi، دیتا، یا حالت هواپیما).",
+        "سلام. گوشی را وصل کن. می‌توانم Wi‑Fi را خاموش/روشن کنم یا به وای‌فای مغازه وصل/فراموش کنم.",
     },
   ]);
   const [input, setInput] = useState("");
@@ -46,6 +53,7 @@ export function App() {
   const [pendingAction, setPendingAction] = useState<PendingAction | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [actionMsg, setActionMsg] = useState<string | null>(null);
 
   const selectedSerial = useMemo(
     () => deviceSerial || devices.find((d) => d.status === "device")?.serial || "",
@@ -55,11 +63,13 @@ export function App() {
   async function refresh() {
     setError(null);
     try {
-      const [h, d] = await Promise.all([
+      const [h, d, s] = await Promise.all([
         fetch("/api/health").then((r) => r.json()),
         fetch("/api/devices").then((r) => r.json()),
+        fetch("/api/settings").then((r) => r.json()),
       ]);
       setHealth(h);
+      if (s.ok && s.settings?.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
       if (d.ok) setDevices(d.devices ?? []);
       else setError(d.message ?? "خطا در خواندن دستگاه‌ها");
 
@@ -86,6 +96,74 @@ export function App() {
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  async function saveShopSettings() {
+    setSettingsMsg(null);
+    const res = await fetch("/api/settings", {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        shopWifiSsid: shopSsid,
+        ...(shopPassword ? { shopWifiPassword: shopPassword } : {}),
+      }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      setSettingsMsg(data.message ?? "خطا در ذخیره");
+      return;
+    }
+    setShopPassword("");
+    setSettingsMsg("تنظیمات وای‌فای مغازه ذخیره شد.");
+    await refresh();
+  }
+
+  async function shopWifi(action: "connect" | "forget") {
+    setBusy(true);
+    setActionMsg(null);
+    setError(null);
+    try {
+      const res = await fetch(`/api/network/shop-wifi/${action}`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        setError(data.message ?? "عملیات ناموفق");
+      } else {
+        setActionMsg(data.message ?? "انجام شد");
+        if (data.after) setNetwork(data.after);
+      }
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function toggleWifi(enabled: boolean) {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/network/wifi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled,
+          deviceSerial: selectedSerial || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) setError(data.message ?? "خطا");
+      else if (data.status) setNetwork(data.status);
+      await refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function send(confirmAction = false) {
     const text = (inputRef.current?.value ?? input).trim();
@@ -118,10 +196,7 @@ export function App() {
         setError(data.message ?? "خطای چت");
         return;
       }
-      setMessages((prev) => [
-        ...prev,
-        { role: "assistant", content: data.reply ?? "" },
-      ]);
+      setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "" }]);
       setPendingAction(data.pendingAction ?? null);
       await refresh();
     } catch (err) {
@@ -136,8 +211,7 @@ export function App() {
       <header className="brand">
         <h1>Fixo</h1>
         <p>
-          دستیار تعمیرات نرم‌افزاری اندروید — فاز اول: خاموش و روشن کردن اینترنت گوشی از
-          روی سیستم لینوکس تعمیرکار.
+          دستیار تعمیرات نرم‌افزاری اندروید — شبکه، وای‌فای مغازه، و کنترل دستی روی لینوکس.
         </p>
       </header>
 
@@ -153,6 +227,10 @@ export function App() {
           <div className="status-row">
             <span>ADB</span>
             <span className="pill unknown">{devices.length} device</span>
+          </div>
+          <div className="status-row">
+            <span>SSID فعلی</span>
+            <span className="pill unknown">{network?.wifiSsid || "—"}</span>
           </div>
 
           <div style={{ marginTop: 12 }}>
@@ -205,10 +283,88 @@ export function App() {
           </div>
 
           <div className="actions" style={{ marginTop: 16 }}>
+            <button type="button" disabled={busy} onClick={() => void toggleWifi(true)}>
+              Wi‑Fi روشن
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void toggleWifi(false)}
+            >
+              Wi‑Fi خاموش
+            </button>
             <button className="secondary" type="button" onClick={() => void refresh()}>
               بروزرسانی
             </button>
           </div>
+
+          <h2 style={{ marginTop: 22 }}>وای‌فای مغازه</h2>
+          <p className="muted">
+            شبکه تنظیم‌شده: {health?.shopWifiSsid || shopSsid}{" "}
+            {health?.hasShopWifiPassword ? "(رمز ذخیره شده)" : "(رمز ندارد)"}
+          </p>
+          <div className="actions">
+            <button type="button" disabled={busy} onClick={() => void shopWifi("connect")}>
+              وصل به وای‌فای مغازه
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => void shopWifi("forget")}
+            >
+              فراموش کردن شبکه
+            </button>
+          </div>
+          {actionMsg ? <p className="muted">{actionMsg}</p> : null}
+
+          <h2 style={{ marginTop: 22 }}>تنظیمات برنامه</h2>
+          <label className="muted" htmlFor="ssid">
+            SSID مغازه
+          </label>
+          <input
+            id="ssid"
+            value={shopSsid}
+            onChange={(e) => setShopSsid(e.target.value)}
+            style={{
+              width: "100%",
+              marginTop: 6,
+              marginBottom: 10,
+              padding: 8,
+              borderRadius: 10,
+              border: "1px solid var(--line)",
+              background: "rgba(0,0,0,0.25)",
+              color: "var(--ink)",
+              font: "inherit",
+            }}
+          />
+          <label className="muted" htmlFor="pass">
+            رمز وای‌فای (هر هفته اینجا عوض کن)
+          </label>
+          <input
+            id="pass"
+            type="password"
+            value={shopPassword}
+            placeholder={health?.hasShopWifiPassword ? "•••••••• (برای تغییر بنویس)" : "رمز را وارد کن"}
+            onChange={(e) => setShopPassword(e.target.value)}
+            style={{
+              width: "100%",
+              marginTop: 6,
+              marginBottom: 10,
+              padding: 8,
+              borderRadius: 10,
+              border: "1px solid var(--line)",
+              background: "rgba(0,0,0,0.25)",
+              color: "var(--ink)",
+              font: "inherit",
+            }}
+          />
+          <button type="button" className="secondary" onClick={() => void saveShopSettings()}>
+            ذخیره تنظیمات
+          </button>
+          {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
+
           {error ? <p className="error">{error}</p> : null}
           <p className="muted" style={{ marginTop: 12 }}>
             پیش‌نیاز: adb روی PATH و USB debugging فعال باشد.
@@ -249,7 +405,7 @@ export function App() {
             <textarea
               ref={inputRef}
               value={input}
-              placeholder="مثلاً: اینترنت گوشی را خاموش کن"
+              placeholder="مثلاً: به وای‌فای مغازه وصل کن"
               onChange={(e) => setInput(e.target.value)}
               onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
               onKeyDown={(e) => {
@@ -260,11 +416,7 @@ export function App() {
               }}
             />
             <div className="actions">
-              <button
-                type="button"
-                disabled={busy}
-                onClick={() => void send(false)}
-              >
+              <button type="button" disabled={busy} onClick={() => void send(false)}>
                 {busy ? "در حال اجرا..." : "ارسال"}
               </button>
             </div>
