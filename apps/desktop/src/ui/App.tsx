@@ -229,6 +229,7 @@ export function App() {
     }
   }
 
+  async function toggleWifi(enabled: boolean) {
     setBusy(true);
     setError(null);
     try {
