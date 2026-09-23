@@ -174,9 +174,7 @@ export function App() {
       }
       if (d.ok) setDevices(d.devices ?? []);
       else {
-        const msg = d.message ?? t(locale, "devicesError");
-        setError(msg);
-        pushToast(msg, "error");
+        setError(d.message ?? t(locale, "devicesError"));
       }
 
       const serial =
@@ -190,9 +188,7 @@ export function App() {
         else setNetwork(null);
       } else setNetwork(null);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
-      setError(msg);
-      pushToast(msg, "error");
+      setError(err instanceof Error ? err.message : String(err));
     }
   }
 

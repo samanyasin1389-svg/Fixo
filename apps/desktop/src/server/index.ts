@@ -93,9 +93,15 @@ app.get("/api/devices", async (_req, res) => {
     const devices = await listDevices(adb);
     res.json({ ok: true, devices });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // No adb binary / not installed — treat as zero devices, not a hard crash.
+    if (/ENOENT|not found|adb/i.test(message)) {
+      res.json({ ok: true, devices: [], warning: message });
+      return;
+    }
     res.status(500).json({
       ok: false,
-      message: err instanceof Error ? err.message : String(err),
+      message,
     });
   }
 });
@@ -561,19 +567,32 @@ app.post("/api/vpn/provision", async (req, res) => {
 
     if (pushToDevice) {
       try {
-        const { serial } = await resolveSerial(adb, serialParam);
-        const result = await pushConfigToV2Box(adb, serial, account.subscriptionUrl);
-        push = {
-          ok: result.ok,
-          strategy: result.strategy,
-          message: result.message,
-          installed: result.installed,
-          evidence: result.evidence,
-        };
+        const devices = await listDevices(adb);
+        const ready = devices.filter((d) => d.status === "device");
+        if (ready.length === 0 && !serialParam) {
+          push = {
+            ok: false,
+            strategy: "no_device",
+            message: "گوشی وصل نیست — لینک را کپی کن یا گوشی را وصل کن",
+          };
+        } else {
+          const { serial } = await resolveSerial(adb, serialParam);
+          const result = await pushConfigToV2Box(adb, serial, account.subscriptionUrl);
+          push = {
+            ok: result.ok,
+            strategy: result.strategy,
+            message: result.message,
+            installed: result.installed,
+            evidence: result.evidence,
+          };
+        }
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         push = {
           ok: false,
-          message: err instanceof Error ? err.message : String(err),
+          message: /ENOENT|adb/i.test(message)
+            ? "adb روی این سیستم نصب نیست — لینک را دستی در وی‌توباکس وارد کن"
+            : message,
         };
       }
     }

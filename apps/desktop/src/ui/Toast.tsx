@@ -81,7 +81,7 @@ export function useToastQueue() {
     const trimmed = message.trim();
     if (!trimmed) return;
     const id = idRef.current++;
-    setToasts((prev) => [...prev, { id, message: trimmed, kind }]);
+    setToasts((prev) => [...prev, { id, message: trimmed, kind }].slice(-4));
   }
 
   function dismissToast(id: number) {
