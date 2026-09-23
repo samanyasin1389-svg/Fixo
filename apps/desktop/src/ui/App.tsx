@@ -7,6 +7,7 @@ import {
   type Locale,
   type Theme,
 } from "./i18n";
+import { ToastHost, useToastQueue } from "./Toast";
 
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
@@ -78,7 +79,7 @@ export function App() {
   const [shopPassword, setShopPassword] = useState("");
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
   const [showSettings, setShowSettings] = useState(false);
-  const [appMsg, setAppMsg] = useState<string | null>(null);
+  const { toasts, pushToast, dismissToast } = useToastQueue();
   const [catalog, setCatalog] = useState<CatalogApp[]>([]);
   const [appsOpen, setAppsOpen] = useState(true);
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
@@ -94,6 +95,14 @@ export function App() {
   const [manualSource, setManualSource] = useState<ManualSource>("model_search");
   const [manualTargets, setManualTargets] = useState<CatalogApp[]>([]);
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
+  const [vpnOpen, setVpnOpen] = useState(false);
+  const [vpnForm, setVpnForm] = useState({ username: "", days: "", gigabytes: "" });
+  const [vpnResult, setVpnResult] = useState<{
+    status?: string;
+    action?: string;
+    subscriptionUrl?: string;
+    message?: string;
+  } | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [welcomeSet, setWelcomeSet] = useState(false);
   const [input, setInput] = useState("");
@@ -164,7 +173,9 @@ export function App() {
         }
       }
       if (d.ok) setDevices(d.devices ?? []);
-      else setError(d.message ?? t(locale, "devicesError"));
+      else {
+        setError(d.message ?? t(locale, "devicesError"));
+      }
 
       const serial =
         deviceSerial ||
@@ -258,14 +269,21 @@ export function App() {
         body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "Failed");
-      else {
-        setActionMsg(data.message ?? "OK");
+      if (!data.ok) {
+        const msg = data.message ?? "Failed";
+        setError(msg);
+        pushToast(msg, "error");
+      } else {
+        const msg = data.message ?? "OK";
+        setActionMsg(msg);
+        pushToast(msg, "success");
         if (data.after) setNetwork(data.after);
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
     } finally {
       setBusy(false);
     }
@@ -281,7 +299,7 @@ export function App() {
   async function installFromPlayDirect(apps: CatalogApp[]) {
     if (!apps.length) return;
     setBusy(true);
-    setAppMsg(t(locale, "installing"));
+    pushToast(t(locale, "installing"), "info");
     setError(null);
     const notes: string[] = [];
     const failed: CatalogApp[] = [];
@@ -307,7 +325,7 @@ export function App() {
           notes.push(`${app.label}: ${t(locale, "playFail")}`);
         }
       }
-      setAppMsg(notes.join(" · "));
+      pushToast(notes.join(" · "), "info");
       if (failed.length) {
         setManualTargets(failed);
         setManualOpen(true);
@@ -317,7 +335,7 @@ export function App() {
       setError(err instanceof Error ? err.message : String(err));
       setManualTargets(apps);
       setManualOpen(true);
-      setAppMsg(t(locale, "playFail"));
+      pushToast(t(locale, "playFail"), "error");
     } finally {
       setBusy(false);
     }
@@ -333,7 +351,7 @@ export function App() {
       return;
     }
     setBusy(true);
-    setAppMsg(t(locale, "installing"));
+    pushToast(t(locale, "installing"), "info");
     setError(null);
     const notes: string[] = [];
     try {
@@ -363,7 +381,7 @@ export function App() {
           notes.push(`${app.label}: ${data.message ?? "Failed"}`);
         }
       }
-      setAppMsg(notes.join(" · "));
+      pushToast(notes.join(" · "), "info");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -394,7 +412,7 @@ export function App() {
       const data = await res.json();
       if (!data.ok) setError(data.message ?? "Failed");
       else {
-        setAppMsg(data.message ?? t(locale, "saved"));
+        pushToast(data.message ?? t(locale, "saved"), "success");
         setNewApp({ label: "", packageId: "", localApkPath: "", githubRepo: "", apkUrl: "" });
         setShowAddApp(false);
         await loadCatalog();
@@ -408,8 +426,7 @@ export function App() {
 
   async function startBackup() {
     setBusy(true);
-    setAppMsg(null);
-    setError(null);
+        setError(null);
     try {
       const res = await fetch("/api/backup", {
         method: "POST",
@@ -420,7 +437,7 @@ export function App() {
       if (!data.ok) setError(data.message ?? "Failed");
       else {
         setBackupJob(data.job);
-        setAppMsg(t(locale, "backupStarted"));
+        pushToast(t(locale, "backupStarted"), "success");
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -453,16 +470,81 @@ export function App() {
         }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "Error");
-      else {
+      if (!data.ok) {
+        const msg = data.message ?? "Error";
+        setError(msg);
+        pushToast(msg, "error");
+      } else {
         if (data.status) setNetwork(data.status);
-        setActionMsg(data.message ?? (enabled ? "Wi‑Fi ON" : "Wi‑Fi OFF"));
+        const msg = data.message ?? (enabled ? "Wi‑Fi ON" : "Wi‑Fi OFF");
+        setActionMsg(msg);
+        pushToast(msg, "success");
       }
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function provisionVpn() {
+    const username = vpnForm.username.trim();
+    const days = Number(vpnForm.days);
+    const gigabytes = Number(vpnForm.gigabytes);
+    if (!username || !Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
+      pushToast(t(locale, "vpnNeedFields"), "error");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setVpnResult(null);
+    pushToast(t(locale, "vpnBusy"), "info");
+    try {
+      const res = await fetch("/api/vpn/provision", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          username,
+          days,
+          gigabytes,
+          deviceSerial: selectedSerial || undefined,
+          pushToDevice: true,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        const msg = data.message ?? "Failed";
+        setError(msg);
+        pushToast(msg, "error");
+        return;
+      }
+      setVpnResult({
+        status: data.account?.status,
+        action: data.account?.action,
+        subscriptionUrl: data.account?.subscriptionUrl,
+        message: data.message,
+      });
+      pushToast(data.message ?? data.account?.message ?? "OK", data.push?.ok === false ? "error" : "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyVpnLink() {
+    const url = vpnResult?.subscriptionUrl;
+    if (!url) return;
+    try {
+      await navigator.clipboard.writeText(url);
+      pushToast(t(locale, "vpnLinkCopied"), "success");
+    } catch {
+      pushToast(url, "info");
     }
   }
 
@@ -494,14 +576,18 @@ export function App() {
       });
       const data = await res.json();
       if (!data.ok) {
-        setError(data.message ?? "Chat error");
+        const msg = data.message ?? "Chat error";
+        setError(msg);
+        pushToast(msg, "error");
         return;
       }
       setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "" }]);
       setPendingAction(data.pendingAction ?? null);
       await refresh();
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
     } finally {
       setBusy(false);
     }
@@ -511,6 +597,7 @@ export function App() {
 
   return (
     <div className="app">
+      <ToastHost toasts={toasts} onDismiss={dismissToast} />
       <div className="atmosphere" aria-hidden="true" />
       <header className="brand">
         <div className="brand-top">
@@ -735,7 +822,110 @@ export function App() {
             ) : null}
           </div>
 
-          {appMsg ? <p className="muted app-msg">{appMsg}</p> : null}
+          <div className="section-gap">
+            <button
+              type="button"
+              className="disclosure"
+              onClick={() => setVpnOpen((v) => !v)}
+            >
+              <span>{t(locale, "vpnSection")}</span>
+              <span className="chevron">{vpnOpen ? "▾" : "◂"}</span>
+            </button>
+            {vpnOpen ? (
+              <div className="vpn-body">
+                <div className="suggest-chips">
+                  <button
+                    type="button"
+                    className="secondary chip"
+                    onClick={() =>
+                      setVpnForm((s) => ({ ...s, days: "30", gigabytes: "30" }))
+                    }
+                  >
+                    {t(locale, "vpnSuggest30")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary chip"
+                    onClick={() =>
+                      setVpnForm((s) => ({ ...s, days: "30", gigabytes: "50" }))
+                    }
+                  >
+                    {t(locale, "vpnSuggest50")}
+                  </button>
+                  <button
+                    type="button"
+                    className="secondary chip"
+                    onClick={() =>
+                      setVpnForm((s) => ({ ...s, days: "90", gigabytes: "100" }))
+                    }
+                  >
+                    {t(locale, "vpnSuggest100")}
+                  </button>
+                </div>
+                <input
+                  className="field"
+                  placeholder={t(locale, "vpnUsername")}
+                  value={vpnForm.username}
+                  onChange={(e) =>
+                    setVpnForm((s) => ({ ...s, username: e.target.value }))
+                  }
+                />
+                <input
+                  className="field"
+                  type="number"
+                  min={1}
+                  placeholder={t(locale, "vpnDays")}
+                  value={vpnForm.days}
+                  onChange={(e) => setVpnForm((s) => ({ ...s, days: e.target.value }))}
+                />
+                <input
+                  className="field"
+                  type="number"
+                  min={1}
+                  placeholder={t(locale, "vpnGigabytes")}
+                  value={vpnForm.gigabytes}
+                  onChange={(e) =>
+                    setVpnForm((s) => ({ ...s, gigabytes: e.target.value }))
+                  }
+                />
+                <button
+                  type="button"
+                  disabled={
+                    busy ||
+                    !vpnForm.username.trim() ||
+                    !vpnForm.days.trim() ||
+                    !vpnForm.gigabytes.trim()
+                  }
+                  onClick={() => void provisionVpn()}
+                >
+                  {t(locale, "vpnProvision")}
+                </button>
+                {vpnResult ? (
+                  <div className="vpn-result">
+                    <p className="muted">
+                      {t(locale, "vpnStatus")}: {vpnResult.status ?? "—"}
+                      {vpnResult.action ? ` (${vpnResult.action})` : ""}
+                    </p>
+                    {vpnResult.message ? (
+                      <p className="muted tiny">{vpnResult.message}</p>
+                    ) : null}
+                    {vpnResult.subscriptionUrl ? (
+                      <>
+                        <p className="muted tiny">{vpnResult.subscriptionUrl}</p>
+                        <button
+                          type="button"
+                          className="secondary"
+                          onClick={() => void copyVpnLink()}
+                        >
+                          {t(locale, "vpnCopyLink")}
+                        </button>
+                      </>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+          </div>
 
           <div className="section-gap">
             <button

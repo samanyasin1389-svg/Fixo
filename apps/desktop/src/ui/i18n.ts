@@ -58,7 +58,20 @@ export type MessageKey =
   | "manualInstall"
   | "manualInstallHint"
   | "runManual"
-  | "installing";
+  | "installing"
+  | "vpnSection"
+  | "vpnUsername"
+  | "vpnDays"
+  | "vpnGigabytes"
+  | "vpnSuggest30"
+  | "vpnSuggest50"
+  | "vpnSuggest100"
+  | "vpnProvision"
+  | "vpnNeedFields"
+  | "vpnLinkCopied"
+  | "vpnCopyLink"
+  | "vpnBusy"
+  | "vpnStatus";
 
 const fa: Record<MessageKey, string> = {
   tagline: "میزکار تعمیرات؛ شبکه، نصب، بک‌آپ.",
@@ -118,6 +131,19 @@ const fa: Record<MessageKey, string> = {
   manualInstallHint: "اگر پلی جواب نداد، یکی از این‌ها را بزن.",
   runManual: "اجرا",
   installing: "در حال نصب…",
+  vpnSection: "VPN پاسارگاد",
+  vpnUsername: "نام‌کاربری / شماره",
+  vpnDays: "مدت (روز)",
+  vpnGigabytes: "حجم (گیگ)",
+  vpnSuggest30: "یک ماه / ۳۰ گیگ",
+  vpnSuggest50: "یک ماه / ۵۰ گیگ",
+  vpnSuggest100: "سه ماه / ۱۰۰ گیگ",
+  vpnProvision: "ساخت / تمدید + نصب روی گوشی",
+  vpnNeedFields: "username، مدت و حجم را پر کن",
+  vpnLinkCopied: "لینک کپی شد",
+  vpnCopyLink: "کپی لینک",
+  vpnBusy: "در حال ساخت…",
+  vpnStatus: "وضعیت",
 };
 
 const en: Record<MessageKey, string> = {
@@ -178,6 +204,19 @@ const en: Record<MessageKey, string> = {
   manualInstallHint: "If Play failed, pick one of these.",
   runManual: "Run",
   installing: "Installing…",
+  vpnSection: "Pasargad VPN",
+  vpnUsername: "Username / phone",
+  vpnDays: "Days",
+  vpnGigabytes: "Gigabytes",
+  vpnSuggest30: "1 month / 30 GB",
+  vpnSuggest50: "1 month / 50 GB",
+  vpnSuggest100: "3 months / 100 GB",
+  vpnProvision: "Create / renew + push to phone",
+  vpnNeedFields: "Fill username, days, and gigabytes",
+  vpnLinkCopied: "Link copied",
+  vpnCopyLink: "Copy link",
+  vpnBusy: "Provisioning…",
+  vpnStatus: "Status",
 };
 
 const tables: Record<Locale, Record<MessageKey, string>> = { fa, en };

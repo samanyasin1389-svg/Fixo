@@ -93,9 +93,15 @@ app.get("/api/devices", async (_req, res) => {
     const devices = await listDevices(adb);
     res.json({ ok: true, devices });
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // No adb binary / not installed — treat as zero devices, not a hard crash.
+    if (/ENOENT|not found|adb/i.test(message)) {
+      res.json({ ok: true, devices: [], warning: message });
+      return;
+    }
     res.status(500).json({
       ok: false,
-      message: err instanceof Error ? err.message : String(err),
+      message,
     });
   }
 });
@@ -514,6 +520,103 @@ app.post("/api/backup/:jobId/:action", async (req, res) => {
     }
     res.json({ ok: true, job });
   } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/vpn/provision", async (req, res) => {
+  try {
+    const username = String(req.body?.username ?? "").trim();
+    const days = Number(req.body?.days);
+    const gigabytes = Number(req.body?.gigabytes);
+    if (!username || !Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
+      res.status(400).json({
+        ok: false,
+        message: "username، days و gigabytes همگی لازمند",
+      });
+      return;
+    }
+
+    const { createPasargadClient, pushConfigToV2Box } = await import("@fixo/mcp-apps");
+    const client = createPasargadClient();
+    if (!client.hasCredentials) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+      });
+      return;
+    }
+
+    const account = await client.provision({ username, days, gigabytes });
+
+    let push: {
+      ok: boolean;
+      strategy?: string;
+      message: string;
+      installed?: boolean;
+      evidence?: string[];
+    } | null = null;
+
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const pushToDevice = req.body?.pushToDevice !== false;
+
+    if (pushToDevice) {
+      try {
+        const devices = await listDevices(adb);
+        const ready = devices.filter((d) => d.status === "device");
+        if (ready.length === 0 && !serialParam) {
+          push = {
+            ok: false,
+            strategy: "no_device",
+            message: "گوشی وصل نیست — لینک را کپی کن یا گوشی را وصل کن",
+          };
+        } else {
+          const { serial } = await resolveSerial(adb, serialParam);
+          const result = await pushConfigToV2Box(adb, serial, account.subscriptionUrl);
+          push = {
+            ok: result.ok,
+            strategy: result.strategy,
+            message: result.message,
+            installed: result.installed,
+            evidence: result.evidence,
+          };
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        push = {
+          ok: false,
+          message: /ENOENT|adb/i.test(message)
+            ? "adb روی این سیستم نصب نیست — لینک را دستی در وی‌توباکس وارد کن"
+            : message,
+        };
+      }
+    }
+
+    res.json({
+      ok: true,
+      account,
+      push,
+      message: push?.ok
+        ? `${account.message} — ${push.message}`
+        : push
+          ? `${account.message}. وی‌توباکس: ${push.message}`
+          : account.message,
+    });
+  } catch (err) {
+    const { PasargadError } = await import("@fixo/mcp-apps");
+    if (err instanceof PasargadError) {
+      res.status(err.statusCode && err.statusCode >= 400 ? err.statusCode : 500).json({
+        ok: false,
+        message: err.message,
+        detail: err.detail,
+      });
+      return;
+    }
     res.status(500).json({
       ok: false,
       message: err instanceof Error ? err.message : String(err),

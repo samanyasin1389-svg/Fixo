@@ -716,3 +716,132 @@ button:disabled {
   background: linear-gradient(90deg, var(--accent-dim), var(--accent-bright));
   transition: width 220ms ease;
 }
+
+/* —— Toast host —— */
+.toast-host {
+  position: fixed;
+  z-index: 80;
+  bottom: 22px;
+  inset-inline-end: 22px;
+  display: flex;
+  flex-direction: column-reverse;
+  gap: 10px;
+  width: min(360px, calc(100vw - 28px));
+  pointer-events: none;
+}
+
+.toast {
+  pointer-events: auto;
+  border-radius: 14px;
+  border: 1px solid var(--panel-border);
+  background: color-mix(in srgb, var(--panel) 94%, transparent);
+  backdrop-filter: blur(12px);
+  box-shadow: var(--shadow-soft);
+  overflow: hidden;
+  animation: toast-in 220ms ease;
+}
+
+.toast-info {
+  border-color: color-mix(in srgb, var(--accent) 35%, var(--panel-border));
+}
+
+.toast-success {
+  border-color: color-mix(in srgb, var(--accent-bright) 50%, var(--panel-border));
+}
+
+.toast-error {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--panel-border));
+}
+
+.toast-progress {
+  height: 3px;
+  background: color-mix(in srgb, var(--ink) 10%, transparent);
+}
+
+.toast-progress-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--accent-dim), var(--accent-bright));
+  transform-origin: inline-start;
+}
+
+.toast-error .toast-progress-fill {
+  background: linear-gradient(90deg, #c2474f, var(--danger));
+}
+
+.toast-body {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  align-items: start;
+  padding: 12px 12px 12px 14px;
+}
+
+.toast-message {
+  margin: 0;
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--ink);
+}
+
+.toast-close {
+  min-height: 28px !important;
+  min-width: 28px;
+  padding: 0 8px !important;
+  border-radius: 8px !important;
+  font-size: 1.1rem;
+  line-height: 1;
+  background: transparent !important;
+  color: var(--muted) !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.toast-close:hover {
+  color: var(--ink) !important;
+  background: color-mix(in srgb, var(--ink) 8%, transparent) !important;
+}
+
+@keyframes toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* —— VPN section —— */
+.vpn-body {
+  display: grid;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.suggest-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  min-height: 32px !important;
+  padding: 6px 12px !important;
+  font-size: 0.78rem !important;
+  border-radius: 999px !important;
+}
+
+.vpn-result {
+  display: grid;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  border: 1px solid var(--line);
+  background: color-mix(in srgb, var(--ink) 4%, transparent);
+}
+
+.vpn-result .muted {
+  margin: 0;
+  word-break: break-all;
+}

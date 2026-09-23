@@ -18,14 +18,16 @@ import {
 import {
   backupJobs,
   checkAppInstalled,
+  createPasargadClient,
   installAppCascade,
   installFromPlay,
   listCatalogApps,
   openPlayListing,
+  PasargadError,
+  pushConfigToV2Box,
   resolvePackageId,
   upsertCatalogApp,
 } from "@fixo/mcp-apps";
-
 export type ChatMessage = {
   role: "user" | "assistant" | "system";
   content: string;
@@ -518,15 +520,76 @@ export async function handleChat(input: {
         return toolJson({ ok: true, job });
       },
     }),
+    provision_vpn: tool({
+      description:
+        "Create or renew a Pasargad/PasarGuard VPN account and push the subscription config into V2Box on the phone. Use when technician asks for وی‌پی‌ان / پاسارگاد / VPN. username, days, and gigabytes are all required — ask if missing. Suggest chips are only UI helpers; do not invent values.",
+      parameters: z.object({
+        username: z.string().describe("Usually the phone number"),
+        days: z.number().positive().describe("Account duration in days"),
+        gigabytes: z.number().positive().describe("Data limit in GB"),
+        deviceSerial: z.string().optional(),
+        pushToDevice: z.boolean().default(true),
+      }),
+      execute: async ({ username, days, gigabytes, deviceSerial, pushToDevice }) => {
+        try {
+          const client = createPasargadClient();
+          if (!client.hasCredentials) {
+            return toolJson({
+              ok: false,
+              message:
+                "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+            });
+          }
+          const account = await client.provision({ username, days, gigabytes });
+          let push = null;
+          if (pushToDevice !== false) {
+            const { serial, evidence } = await resolveSerial(
+              input.adb,
+              deviceSerial ?? input.deviceSerial,
+            );
+            const result = await pushConfigToV2Box(
+              input.adb,
+              serial,
+              account.subscriptionUrl,
+            );
+            push = {
+              deviceSerial: serial,
+              ...result,
+              evidence: [...evidence, ...result.evidence],
+            };
+          }
+          return toolJson({
+            ok: true,
+            account,
+            push,
+            message: push?.ok
+              ? `${account.message} — ${push.message}`
+              : push
+                ? `${account.message}. وی‌توباکس: ${push.message}`
+                : account.message,
+          });
+        } catch (err) {
+          if (err instanceof PasargadError) {
+            return toolJson({
+              ok: false,
+              message: err.message,
+              detail: err.detail,
+            });
+          }
+          throw err;
+        }
+      },
+    }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
-جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت ننویس.`;
+اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس: از provision_vpn با username + days + gigabytes استفاده کن. اگر هر کدام نبود بپرس؛ مقدار از خودت نساز.
+جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس.`;
 
   let messages = input.messages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",
