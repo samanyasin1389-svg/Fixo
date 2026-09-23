@@ -521,6 +521,90 @@ app.post("/api/backup/:jobId/:action", async (req, res) => {
   }
 });
 
+app.post("/api/vpn/provision", async (req, res) => {
+  try {
+    const username = String(req.body?.username ?? "").trim();
+    const days = Number(req.body?.days);
+    const gigabytes = Number(req.body?.gigabytes);
+    if (!username || !Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
+      res.status(400).json({
+        ok: false,
+        message: "username، days و gigabytes همگی لازمند",
+      });
+      return;
+    }
+
+    const { createPasargadClient, pushConfigToV2Box } = await import("@fixo/mcp-apps");
+    const client = createPasargadClient();
+    if (!client.hasCredentials) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+      });
+      return;
+    }
+
+    const account = await client.provision({ username, days, gigabytes });
+
+    let push: {
+      ok: boolean;
+      strategy?: string;
+      message: string;
+      installed?: boolean;
+      evidence?: string[];
+    } | null = null;
+
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const pushToDevice = req.body?.pushToDevice !== false;
+
+    if (pushToDevice) {
+      try {
+        const { serial } = await resolveSerial(adb, serialParam);
+        const result = await pushConfigToV2Box(adb, serial, account.subscriptionUrl);
+        push = {
+          ok: result.ok,
+          strategy: result.strategy,
+          message: result.message,
+          installed: result.installed,
+          evidence: result.evidence,
+        };
+      } catch (err) {
+        push = {
+          ok: false,
+          message: err instanceof Error ? err.message : String(err),
+        };
+      }
+    }
+
+    res.json({
+      ok: true,
+      account,
+      push,
+      message: push?.ok
+        ? `${account.message} — ${push.message}`
+        : push
+          ? `${account.message}. وی‌توباکس: ${push.message}`
+          : account.message,
+    });
+  } catch (err) {
+    const { PasargadError } = await import("@fixo/mcp-apps");
+    if (err instanceof PasargadError) {
+      res.status(err.statusCode && err.statusCode >= 400 ? err.statusCode : 500).json({
+        ok: false,
+        message: err.message,
+        detail: err.detail,
+      });
+      return;
+    }
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!process.env.OPENAI_API_KEY) {

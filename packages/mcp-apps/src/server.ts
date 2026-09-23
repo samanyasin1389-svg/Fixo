@@ -282,6 +282,68 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
     },
   );
 
+  server.tool(
+    "provision_vpn",
+    "Create or renew a Pasargad VPN account and push the subscription into V2Box on the phone. username, days, and gigabytes are required.",
+    {
+      username: z.string(),
+      days: z.number().positive(),
+      gigabytes: z.number().positive(),
+      deviceSerial: z.string().optional(),
+      pushToDevice: z.boolean().optional(),
+    },
+    async (args) => {
+      try {
+        const { createPasargadClient, pushConfigToV2Box } = await import(
+          "./pasargad.js"
+        ).then(async (p) => ({
+          createPasargadClient: p.createPasargadClient,
+          pushConfigToV2Box: (await import("./v2box.js")).pushConfigToV2Box,
+        }));
+        const client = createPasargadClient();
+        if (!client.hasCredentials) {
+          return jsonResult(
+            {
+              status: "error",
+              message:
+                "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+            },
+            false,
+          );
+        }
+        const account = await client.provision({
+          username: args.username,
+          days: args.days,
+          gigabytes: args.gigabytes,
+        });
+        let push = null;
+        if (args.pushToDevice !== false) {
+          const { serial, evidence } = await resolveSerial(adb, args.deviceSerial);
+          const result = await pushConfigToV2Box(adb, serial, account.subscriptionUrl);
+          push = { deviceSerial: serial, ...result, evidence: [...evidence, ...result.evidence] };
+        }
+        return jsonResult({
+          status: "ok",
+          message: push?.ok
+            ? `${account.message} — ${push.message}`
+            : push
+              ? `${account.message}. وی‌توباکس: ${push.message}`
+              : account.message,
+          data: { account, push },
+        });
+      } catch (err) {
+        const { PasargadError } = await import("./pasargad.js");
+        if (err instanceof PasargadError) {
+          return jsonResult(
+            { status: "error", message: err.message, detail: err.detail },
+            false,
+          );
+        }
+        return fail(err);
+      }
+    },
+  );
+
   return server;
 }
 
