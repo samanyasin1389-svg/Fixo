@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  SOURCE_IDS,
+  MANUAL_SOURCE_IDS,
   dirFor,
   sourceLabel,
   t,
@@ -33,7 +33,7 @@ type CatalogApp = {
   pinned?: boolean;
 };
 
-type InstallSource = (typeof SOURCE_IDS)[number];
+type ManualSource = (typeof MANUAL_SOURCE_IDS)[number];
 
 type BackupJob = {
   jobId: string;
@@ -80,7 +80,7 @@ export function App() {
   const [showSettings, setShowSettings] = useState(false);
   const [appMsg, setAppMsg] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<CatalogApp[]>([]);
-  const [appsOpen, setAppsOpen] = useState(false);
+  const [appsOpen, setAppsOpen] = useState(true);
   const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [showAddApp, setShowAddApp] = useState(false);
   const [newApp, setNewApp] = useState({
@@ -90,10 +90,9 @@ export function App() {
     githubRepo: "",
     apkUrl: "",
   });
-  const [installStep, setInstallStep] = useState<null | "playAsk" | "source">(null);
-  const [playReady, setPlayReady] = useState(true);
-  const [pendingPackages, setPendingPackages] = useState<CatalogApp[]>([]);
-  const [installSource, setInstallSource] = useState<InstallSource>("auto");
+  const [manualOpen, setManualOpen] = useState(false);
+  const [manualSource, setManualSource] = useState<ManualSource>("model_search");
+  const [manualTargets, setManualTargets] = useState<CatalogApp[]>([]);
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [welcomeSet, setWelcomeSet] = useState(false);
@@ -114,12 +113,10 @@ export function App() {
     [devices],
   );
 
-  const visibleSources = useMemo(() => {
-    const ids = playReady
-      ? SOURCE_IDS
-      : SOURCE_IDS.filter((id) => id !== "play");
-    return ids.map((id) => ({ id, label: sourceLabel(locale, id) }));
-  }, [playReady, locale]);
+  const manualSourceOptions = useMemo(
+    () => MANUAL_SOURCE_IDS.map((id) => ({ id, label: sourceLabel(locale, id) })),
+    [locale],
+  );
 
   useEffect(() => {
     applyDocumentChrome(theme, locale);
@@ -274,39 +271,76 @@ export function App() {
     }
   }
 
-  function beginInstall(apps: CatalogApp[]) {
-    if (!apps.length) return;
-    setPendingPackages(apps);
-    setInstallSource("auto");
-    setPlayReady(true);
-    setInstallStep("playAsk");
-    setAppMsg(null);
-    setError(null);
-  }
-
-  function answerPlayReady(ready: boolean) {
-    setPlayReady(ready);
-    setInstallSource("auto");
-    setInstallStep("source");
-  }
-
   function toggleAppSelect(packageId: string) {
     setSelectedApps((prev) =>
       prev.includes(packageId) ? prev.filter((p) => p !== packageId) : [...prev, packageId],
     );
   }
 
-  async function runInstallCascade(source: InstallSource) {
-    setInstallStep(null);
+  /** One-click Google Play only — no source dialogs */
+  async function installFromPlayDirect(apps: CatalogApp[]) {
+    if (!apps.length) return;
     setBusy(true);
-    setAppMsg(null);
+    setAppMsg(t(locale, "installing"));
+    setError(null);
+    const notes: string[] = [];
+    const failed: CatalogApp[] = [];
+    try {
+      for (const app of apps) {
+        const res = await fetch("/api/apps/install", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            packageId: app.packageId,
+            appLabel: app.label,
+            source: "play",
+            playReady: true,
+            fallback: false,
+            deviceSerial: selectedSerial || undefined,
+          }),
+        });
+        const data = await res.json();
+        if (data.installed) {
+          notes.push(`${app.label}: ${t(locale, "installedOk")}`);
+        } else {
+          failed.push(app);
+          notes.push(`${app.label}: ${t(locale, "playFail")}`);
+        }
+      }
+      setAppMsg(notes.join(" · "));
+      if (failed.length) {
+        setManualTargets(failed);
+        setManualOpen(true);
+      }
+      setSelectedApps([]);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      setManualTargets(apps);
+      setManualOpen(true);
+      setAppMsg(t(locale, "playFail"));
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function runManualInstall() {
+    const apps =
+      manualTargets.length > 0
+        ? manualTargets
+        : catalog.filter((a) => selectedApps.includes(a.packageId));
+    if (!apps.length) {
+      setError(t(locale, "needLabelPackage"));
+      return;
+    }
+    setBusy(true);
+    setAppMsg(t(locale, "installing"));
     setError(null);
     const notes: string[] = [];
     try {
-      for (const app of pendingPackages) {
-        let mappedSource: InstallSource = source;
-        if (source === "github" && !app.sources.githubRepo && app.sources.apkUrl) {
-          mappedSource = "url";
+      for (const app of apps) {
+        let mapped: ManualSource | "url" = manualSource;
+        if (manualSource === "github" && !app.sources.githubRepo && app.sources.apkUrl) {
+          mapped = "url";
         }
         const res = await fetch("/api/apps/install", {
           method: "POST",
@@ -314,30 +348,26 @@ export function App() {
           body: JSON.stringify({
             packageId: app.packageId,
             appLabel: app.label,
-            source: mappedSource,
-            playReady,
-            fallback: true,
+            source: mapped,
+            playReady: false,
+            fallback: false,
             deviceSerial: selectedSerial || undefined,
           }),
         });
         const data = await res.json();
         if (data.browserOpened && !data.installed) {
           notes.push(`${app.label}: ${t(locale, "searchOpened")}`);
+        } else if (data.installed) {
+          notes.push(`${app.label}: ${t(locale, "installedOk")}`);
         } else {
-          notes.push(
-            data.installed
-              ? `${app.label}: OK (${data.usedSource ?? source})`
-              : `${app.label}: ${data.message ?? "Failed"}`,
-          );
+          notes.push(`${app.label}: ${data.message ?? "Failed"}`);
         }
       }
       setAppMsg(notes.join(" · "));
-      setSelectedApps([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
       setBusy(false);
-      setPendingPackages([]);
     }
   }
 
@@ -481,11 +511,22 @@ export function App() {
 
   return (
     <div className="app">
+      <div className="atmosphere" aria-hidden="true" />
       <header className="brand">
         <div className="brand-top">
-          <h1>Fixo</h1>
+          <div className="brand-title-block">
+            <p className="brand-kicker">Android repair desk</p>
+            <h1>Fixo</h1>
+          </div>
           <div className="toolbar">
-            <span className={phoneConnected ? "connect-badge on" : "connect-badge off"}>
+            <span
+              className={
+                phoneConnected
+                  ? "connect-badge on pulse"
+                  : "connect-badge off"
+              }
+            >
+              <span className="connect-dot" />
               {phoneConnected ? t(locale, "connected") : t(locale, "disconnected")}
             </span>
             <div className="toggle-group" role="group" aria-label="theme">
@@ -522,25 +563,27 @@ export function App() {
             </div>
           </div>
         </div>
-        <p>{t(locale, "tagline")}</p>
+        <p className="brand-tagline">{t(locale, "tagline")}</p>
       </header>
 
       <div className="layout">
-        <aside className="panel">
+        <aside className="panel panel-side">
           <h2>{t(locale, "networkShop")}</h2>
-          <div className="status-row">
-            <span>ADB</span>
-            <span className="pill unknown">{devices.length}</span>
-          </div>
-          <div className="status-row">
-            <span>{t(locale, "wifi")}</span>
-            <span className={pillClass(network?.wifiEnabled ?? null)}>
-              {pillLabel(network?.wifiEnabled ?? null)}
-            </span>
-          </div>
-          <div className="status-row">
-            <span>{t(locale, "network")}</span>
-            <span className="pill unknown">{network?.wifiSsid || "—"}</span>
+          <div className="status-card">
+            <div className="status-row">
+              <span>ADB</span>
+              <span className="pill unknown">{devices.length}</span>
+            </div>
+            <div className="status-row">
+              <span>{t(locale, "wifi")}</span>
+              <span className={pillClass(network?.wifiEnabled ?? null)}>
+                {pillLabel(network?.wifiEnabled ?? null)}
+              </span>
+            </div>
+            <div className="status-row">
+              <span>{t(locale, "network")}</span>
+              <span className="pill unknown">{network?.wifiSsid || "—"}</span>
+            </div>
           </div>
 
           {devices.length > 1 ? (
@@ -601,8 +644,8 @@ export function App() {
                       key={app.packageId}
                       type="button"
                       className="app-btn"
-                      disabled={busy || !!installStep}
-                      onClick={() => beginInstall([app])}
+                      disabled={busy}
+                      onClick={() => void installFromPlayDirect([app])}
                     >
                       {app.label}
                     </button>
@@ -626,9 +669,9 @@ export function App() {
                 <div className="actions">
                   <button
                     type="button"
-                    disabled={busy || !selectedApps.length || !!installStep}
+                    disabled={busy || !selectedApps.length}
                     onClick={() =>
-                      beginInstall(
+                      void installFromPlayDirect(
                         catalog.filter((a) => selectedApps.includes(a.packageId)),
                       )
                     }
@@ -692,69 +735,51 @@ export function App() {
             ) : null}
           </div>
 
-          {installStep === "playAsk" ? (
-            <div className="choice-box">
-              <p>{t(locale, "playAsk")}</p>
-              <div className="actions">
-                <button type="button" onClick={() => answerPlayReady(true)}>
-                  {t(locale, "yes")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => answerPlayReady(false)}
-                >
-                  {t(locale, "no")}
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {appMsg ? <p className="muted app-msg">{appMsg}</p> : null}
 
-          {installStep === "source" ? (
-            <div className="choice-box">
-              <p>
-                {t(locale, "whereInstall")}
-                {!playReady ? (
-                  <span className="muted"> {t(locale, "withoutPlay")}</span>
+          <div className="section-gap">
+            <button
+              type="button"
+              className="disclosure"
+              onClick={() => setManualOpen((v) => !v)}
+            >
+              <span>{t(locale, "manualInstall")}</span>
+              <span className="chevron">{manualOpen ? "▾" : "◂"}</span>
+            </button>
+            {manualOpen ? (
+              <div className="apps-body manual-box">
+                <p className="muted">{t(locale, "manualInstallHint")}</p>
+                {manualTargets.length ? (
+                  <p className="muted tiny">
+                    {manualTargets.map((a) => a.label).join(" · ")}
+                  </p>
                 ) : null}
-              </p>
-              <div className="source-list">
-                {visibleSources.map((opt) => (
+                <div className="source-list">
+                  {manualSourceOptions.map((opt) => (
+                    <button
+                      key={opt.id}
+                      type="button"
+                      className={
+                        manualSource === opt.id ? "source-btn active" : "source-btn"
+                      }
+                      onClick={() => setManualSource(opt.id)}
+                    >
+                      {opt.label}
+                    </button>
+                  ))}
+                </div>
+                <div className="actions">
                   <button
-                    key={opt.id}
                     type="button"
-                    className={
-                      installSource === opt.id ? "source-btn active" : "source-btn"
-                    }
-                    onClick={() => setInstallSource(opt.id)}
+                    disabled={busy}
+                    onClick={() => void runManualInstall()}
                   >
-                    {opt.label}
+                    {t(locale, "runManual")}
                   </button>
-                ))}
+                </div>
               </div>
-              <div className="actions">
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => void runInstallCascade(installSource)}
-                >
-                  {t(locale, "startInstall")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  onClick={() => {
-                    setInstallStep(null);
-                    setPendingPackages([]);
-                  }}
-                >
-                  {t(locale, "cancel")}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          {appMsg ? <p className="muted">{appMsg}</p> : null}
+            ) : null}
+          </div>
 
           <div className="section-gap">
             <h2>{t(locale, "backupPhone")}</h2>
@@ -851,7 +876,7 @@ export function App() {
           {error ? <p className="error">{error}</p> : null}
         </aside>
 
-        <section className="panel chat">
+        <section className="panel chat panel-chat">
           <h2>{t(locale, "chat")}</h2>
           <div className="messages">
             {messages.map((m, i) => (

@@ -226,7 +226,13 @@ function buildSourceQueue(
   playReady: boolean,
 ): Array<Exclude<InstallSourceChoice, "auto">> {
   const order = sourceOrder(playReady);
-  if (preferred === "auto") return order;
+  // auto without fallback = Play only (play-first UX)
+  if (preferred === "auto") {
+    if (!fallback) {
+      return playReady ? ["play"] : [];
+    }
+    return order;
+  }
   if (preferred === "play" && !playReady) {
     return fallback ? order : [];
   }

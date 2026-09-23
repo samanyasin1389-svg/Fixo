@@ -419,10 +419,15 @@ app.post("/api/apps/install", async (req, res) => {
       "github",
       "url",
     ]);
+    const resolvedSource = allowed.has(source) ? source : "play";
+    const fallback =
+      typeof req.body?.fallback === "boolean"
+        ? req.body.fallback
+        : false;
     const result = await installAppCascade(adb, serial, packageId, {
-      source: allowed.has(source) ? source : "auto",
+      source: resolvedSource,
       playReady: req.body?.playReady !== false,
-      fallback: req.body?.fallback !== false,
+      fallback,
       appLabel: typeof req.body?.appLabel === "string" ? req.body.appLabel : undefined,
       localApkPath:
         typeof req.body?.localApkPath === "string" ? req.body.localApkPath : undefined,
@@ -430,16 +435,19 @@ app.post("/api/apps/install", async (req, res) => {
       apkUrl: typeof req.body?.apkUrl === "string" ? req.body.apkUrl : undefined,
       timeoutMs: Number(req.body?.timeoutMs) || 90_000,
     });
-    const ok = result.installed || (result.browserOpened && source === "model_search");
+    const ok =
+      result.installed || (result.browserOpened && resolvedSource === "model_search");
     res.json({
       ok,
       deviceSerial: serial,
       ...result,
       message: result.installed
-        ? `${result.packageId} از ${result.usedSource ?? "cascade"} نصب شد`
+        ? `${result.packageId} از ${result.usedSource ?? "play"} نصب شد`
         : result.browserOpened
           ? "جستجو در مرورگر باز شد — بعد از دانلود از APK محلی یا لینک نصب کنید"
-          : `نصب ${result.packageId} ناموفق بود`,
+          : resolvedSource === "play"
+            ? "از پلی نصب نشد. از نصب دستی گزینه‌های دیگر را امتحان کن."
+            : `نصب ${result.packageId} ناموفق بود`,
     });
   } catch (err) {
     res.status(500).json({
