@@ -26,12 +26,6 @@ export type MessageKey =
   | "localApkOptional"
   | "githubOptional"
   | "apkUrlOptional"
-  | "playAsk"
-  | "yes"
-  | "no"
-  | "whereInstall"
-  | "withoutPlay"
-  | "startInstall"
   | "cancel"
   | "backupPhone"
   | "backupHint"
@@ -50,21 +44,24 @@ export type MessageKey =
   | "sending"
   | "chatPlaceholder"
   | "welcome"
-  | "sourceAuto"
-  | "sourcePlay"
   | "sourceModelSearch"
   | "sourceLocalApk"
   | "sourceGithub"
   | "sourceUrl"
   | "saved"
-  | "installCancelled"
   | "needLabelPackage"
   | "searchOpened"
   | "backupStarted"
-  | "devicesError";
+  | "devicesError"
+  | "playFail"
+  | "installedOk"
+  | "manualInstall"
+  | "manualInstallHint"
+  | "runManual"
+  | "installing";
 
 const fa: Record<MessageKey, string> = {
-  tagline: "همراه تعمیرکار؛ شبکه مغازه، نصب اپ و بک‌آپ گوشی مشتری.",
+  tagline: "میزکار تعمیرات؛ شبکه، نصب، بک‌آپ.",
   connected: "وصل",
   disconnected: "قطع",
   themeNight: "شب",
@@ -79,7 +76,7 @@ const fa: Record<MessageKey, string> = {
   off: "خاموش",
   forgetShop: "فراموش مغازه",
   apps: "برنامه‌ها",
-  installSelected: "نصب انتخاب‌شده‌ها",
+  installSelected: "نصب از پلی",
   addApp: "افزودن برنامه",
   closeForm: "بستن فرم",
   saveCatalog: "ذخیره در کاتالوگ",
@@ -88,12 +85,6 @@ const fa: Record<MessageKey, string> = {
   localApkOptional: "مسیر APK محلی (اختیاری)",
   githubOptional: "گیت‌هاب owner/repo (اختیاری)",
   apkUrlOptional: "لینک مستقیم APK (اختیاری)",
-  playAsk: "اکانت پلی روی گوشی آماده‌ست؟",
-  yes: "بله",
-  no: "خیر",
-  whereInstall: "از کجا نصب کنم؟",
-  withoutPlay: "(بدون گوگل پلی)",
-  startInstall: "شروع نصب",
   cancel: "لغو",
   backupPhone: "بک‌آپ گوشی",
   backupHint: "عکس، فیلم و مخاطبین → Desktop/Fixo-Backups",
@@ -111,23 +102,26 @@ const fa: Record<MessageKey, string> = {
   send: "ارسال",
   sending: "...",
   chatPlaceholder: "مثلاً: وای‌فای را روشن کن / تلگرام نصب کن",
-  welcome: "سلام. وای‌فای مغازه، نصب برنامه، یا بک‌آپ گوشی را بگو.",
-  sourceAuto: "خودکار (پیشنهادی)",
-  sourcePlay: "گوگل پلی",
+  welcome: "سلام. وای‌فای، نصب از پلی، یا بک‌آپ را بگو.",
   sourceModelSearch: "جستجوی مدل‌محور",
   sourceLocalApk: "فایل APK روی لپ‌تاپ",
   sourceGithub: "گیت‌هاب",
   sourceUrl: "لینک مستقیم",
   saved: "ذخیره شد.",
-  installCancelled: "نصب لغو شد.",
   needLabelPackage: "نام و packageId لازم است",
   searchOpened: "جستجو باز شد — APK را دانلود کنید",
   backupStarted: "بک‌آپ شروع شد",
   devicesError: "خطا در خواندن دستگاه‌ها",
+  playFail: "از پلی نصب نشد. از نصب دستی گزینه‌های دیگر را امتحان کن.",
+  installedOk: "نصب شد",
+  manualInstall: "نصب دستی",
+  manualInstallHint: "اگر پلی جواب نداد، یکی از این‌ها را بزن.",
+  runManual: "اجرا",
+  installing: "در حال نصب…",
 };
 
 const en: Record<MessageKey, string> = {
-  tagline: "Built for repair techs — shop Wi‑Fi, app installs, and customer phone backups.",
+  tagline: "Repair bench — network, install, backup.",
   connected: "Connected",
   disconnected: "Disconnected",
   themeNight: "Night",
@@ -142,7 +136,7 @@ const en: Record<MessageKey, string> = {
   off: "Off",
   forgetShop: "Forget shop Wi‑Fi",
   apps: "Apps",
-  installSelected: "Install selected",
+  installSelected: "Install from Play",
   addApp: "Add app",
   closeForm: "Close form",
   saveCatalog: "Save to catalog",
@@ -151,12 +145,6 @@ const en: Record<MessageKey, string> = {
   localApkOptional: "Local APK path (optional)",
   githubOptional: "GitHub owner/repo (optional)",
   apkUrlOptional: "Direct APK URL (optional)",
-  playAsk: "Is the Play account ready on the phone?",
-  yes: "Yes",
-  no: "No",
-  whereInstall: "Install from where?",
-  withoutPlay: "(without Google Play)",
-  startInstall: "Start install",
   cancel: "Cancel",
   backupPhone: "Phone backup",
   backupHint: "Photos, videos, contacts → Desktop/Fixo-Backups",
@@ -174,19 +162,22 @@ const en: Record<MessageKey, string> = {
   send: "Send",
   sending: "...",
   chatPlaceholder: "e.g. turn Wi‑Fi on / install Telegram",
-  welcome: "Hi. Ask for shop Wi‑Fi, app install, or a phone backup.",
-  sourceAuto: "Auto (recommended)",
-  sourcePlay: "Google Play",
+  welcome: "Hi. Ask for shop Wi‑Fi, Play install, or a backup.",
   sourceModelSearch: "Model search",
   sourceLocalApk: "Local APK on laptop",
   sourceGithub: "GitHub",
   sourceUrl: "Direct link",
   saved: "Saved.",
-  installCancelled: "Install cancelled.",
   needLabelPackage: "Label and packageId are required",
   searchOpened: "Search opened — download the APK",
   backupStarted: "Backup started",
   devicesError: "Could not read devices",
+  playFail: "Play install failed. Try other options under Manual install.",
+  installedOk: "Installed",
+  manualInstall: "Manual install",
+  manualInstallHint: "If Play failed, pick one of these.",
+  runManual: "Run",
+  installing: "Installing…",
 };
 
 const tables: Record<Locale, Record<MessageKey, string>> = { fa, en };
@@ -201,10 +192,6 @@ export function dirFor(locale: Locale): "rtl" | "ltr" {
 
 export function sourceLabel(locale: Locale, id: string): string {
   switch (id) {
-    case "auto":
-      return t(locale, "sourceAuto");
-    case "play":
-      return t(locale, "sourcePlay");
     case "model_search":
       return t(locale, "sourceModelSearch");
     case "local_apk":
@@ -218,9 +205,8 @@ export function sourceLabel(locale: Locale, id: string): string {
   }
 }
 
-export const SOURCE_IDS = [
-  "auto",
-  "play",
+/** Manual-only sources (no Play, no auto cascade) */
+export const MANUAL_SOURCE_IDS = [
   "model_search",
   "local_apk",
   "github",

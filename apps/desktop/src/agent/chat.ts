@@ -402,7 +402,7 @@ export async function handleChat(input: {
     }),
     install_from_play: tool({
       description:
-        "Install only from Google Play (no cascade). Prefer install_app for normal shop installs.",
+        "Default shop install: Google Play only, no cascade and no confirmation questions. Use this when technician asks to install an app.",
       parameters: z.object({
         packageId: z.string().describe("e.g. com.whatsapp or whatsapp"),
         deviceSerial: z.string().optional(),
@@ -411,25 +411,37 @@ export async function handleChat(input: {
         const resolved = resolvePackageId(packageId);
         const serialHint = deviceSerial ?? input.deviceSerial;
         const { serial, evidence } = await resolveSerial(input.adb, serialHint);
-        const result = await installFromPlay(input.adb, serial, resolved.packageId);
-        return toolJson({
-          ok: result.installed,
-          deviceSerial: serial,
-          ...result,
-          evidence: [...evidence, ...result.evidence],
-        });
+        try {
+          const result = await installFromPlay(input.adb, serial, resolved.packageId);
+          return toolJson({
+            ok: result.installed,
+            deviceSerial: serial,
+            ...result,
+            evidence: [...evidence, ...result.evidence],
+            message: result.installed
+              ? `${result.packageId} از پلی نصب شد`
+              : "از پلی نصب نشد. از نصب دستی گزینه‌های دیگر را امتحان کن.",
+          });
+        } catch (err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          return toolJson({
+            ok: false,
+            deviceSerial: serial,
+            evidence,
+            message: `از پلی نصب نشد. از نصب دستی گزینه‌های دیگر را امتحان کن. (${msg})`,
+          });
+        }
       },
     }),
     install_app: tool({
       description:
-        "Install an app with cascade. playReady=false skips Google Play. source=model_search opens laptop browser with phone-model APK search (technician downloads manually). Default cascade with Play: Play → model_search → local APK → GitHub → URL. Without Play: model_search → local → GitHub → URL.",
+        "Manual/alternate install only. Prefer install_from_play for normal requests. Use when technician explicitly wants model_search, local_apk, github, or url — always with fallback=false.",
       parameters: z.object({
         packageId: z.string(),
         source: z
-          .enum(["auto", "play", "model_search", "local_apk", "github", "url"])
-          .default("auto"),
-        playReady: z.boolean().default(true),
-        fallback: z.boolean().default(true),
+          .enum(["play", "model_search", "local_apk", "github", "url"])
+          .default("play"),
+        fallback: z.boolean().default(false),
         appLabel: z.string().optional(),
         localApkPath: z.string().optional(),
         githubRepo: z.string().optional(),
@@ -444,8 +456,8 @@ export async function handleChat(input: {
         );
         const result = await installAppCascade(input.adb, serial, resolved.packageId, {
           source: args.source,
-          playReady: args.playReady,
-          fallback: args.fallback,
+          playReady: args.source === "play",
+          fallback: false,
           appLabel: args.appLabel,
           localApkPath: args.localApkPath,
           githubRepo: args.githubRepo,
@@ -460,7 +472,9 @@ export async function handleChat(input: {
             ? `${result.packageId} از ${result.usedSource} نصب شد`
             : result.browserOpened
               ? "جستجو در مرورگر باز شد؛ APK را دانلود کنید و با مسیر محلی یا لینک نصب کنید"
-              : `نصب ${result.packageId} کامل نشد`,
+              : args.source === "play"
+                ? "از پلی نصب نشد. از نصب دستی گزینه‌های دیگر را امتحان کن."
+                : `نصب ${result.packageId} کامل نشد`,
         });
       },
     }),
@@ -510,7 +524,7 @@ export async function handleChat(input: {
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
 ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
-اگر گفت اپی را نصب کن: اول اگر معلوم نیست بپرس «اکانت پلی آماده‌ست؟». اگر بله → install_app با playReady=true و source=auto. اگر خیر → playReady=false (پلی را صدا نزن). زنجیره با پلی: Play→جستجوی مدل→APK محلی→GitHub→لینک. بدون پلی: جستجوی مدل→APK→GitHub→لینک. جستجوی مدل فقط مرورگر لپ‌تاپ را باز می‌کند.
+اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 جواب کوتاه و فارسی. رمز وای‌فای را هیچ‌وقت ننویس.`;
 
