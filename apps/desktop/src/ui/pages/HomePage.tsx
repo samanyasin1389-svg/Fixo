@@ -41,15 +41,21 @@ export function HomePage({
       <div className="home-shortcuts">
         <button type="button" className="home-shortcut" onClick={() => onGo("agent")}>
           <span>{t(locale, "homeGoAgent")}</span>
-          <span aria-hidden="true">→</span>
+          <span className="home-shortcut-arrow" aria-hidden="true">
+            ←
+          </span>
         </button>
         <button type="button" className="home-shortcut" onClick={() => onGo("bench")}>
           <span>{t(locale, "homeGoBench")}</span>
-          <span aria-hidden="true">→</span>
+          <span className="home-shortcut-arrow" aria-hidden="true">
+            ←
+          </span>
         </button>
         <button type="button" className="home-shortcut" onClick={() => onGo("settings")}>
           <span>{t(locale, "homeGoSettings")}</span>
-          <span aria-hidden="true">→</span>
+          <span className="home-shortcut-arrow" aria-hidden="true">
+            ←
+          </span>
         </button>
       </div>
     </section>
