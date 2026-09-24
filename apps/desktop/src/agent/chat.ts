@@ -580,15 +580,57 @@ export async function handleChat(input: {
         }
       },
     }),
+    delete_vpn: tool({
+      description:
+        "Permanently delete a Pasargad/PasarGuard VPN account by username (usually phone number). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
+      parameters: z.object({
+        username: z.string().describe("Username or phone number to delete"),
+      }),
+      execute: async ({ username }) => {
+        try {
+          const client = createPasargadClient();
+          if (!client.hasCredentials) {
+            return toolJson({
+              ok: false,
+              message:
+                "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+            });
+          }
+          const existing = await client.lookupUser(username);
+          if (!existing) {
+            return toolJson({
+              ok: false,
+              message: `اکانت ${username.trim()} پیدا نشد`,
+            });
+          }
+          await client.deleteUser(existing.username);
+          return toolJson({
+            ok: true,
+            username: existing.username,
+            message: `اکانت ${existing.username} پاک شد`,
+          });
+        } catch (err) {
+          if (err instanceof PasargadError) {
+            return toolJson({
+              ok: false,
+              message: err.message,
+              detail: err.detail,
+            });
+          }
+          throw err;
+        }
+      },
+    }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, delete_vpn.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس: از provision_vpn با username + days + gigabytes استفاده کن. اگر هر کدام نبود بپرس؛ مقدار از خودت نساز.
+اگر گفت اکانت وی‌پی‌ان / پاسارگاد فلان شماره را پاک کن یا حذف کن: delete_vpn را با همان username بزن.
 جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس.`;
 
   let messages = input.messages.map((m) => ({

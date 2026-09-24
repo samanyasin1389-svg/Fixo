@@ -37,6 +37,9 @@ importers:
       express:
         specifier: ^4.21.2
         version: 4.22.3
+      react-shaders:
+        specifier: ^0.0.4
+        version: 0.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
       zod:
         specifier: ^3.24.2
         version: 3.25.76
@@ -1339,6 +1342,12 @@ packages:
   react-refresh@0.17.0:
     resolution: {integrity: sha512-z6F7K9bV85EfseRCp2bzrpyQ0Gkw1uLoCel9XBVWPg/TjRj94SkJzUTGfOa4bs7iJvBWtQG0Wq7wnI0syw3EBQ==}
     engines: {node: '>=0.10.0'}
+
+  react-shaders@0.0.4:
+    resolution: {integrity: sha512-uh42UkMeS4DXyoyYzx+SJryCbULJi6eOMZSLO8Xp1+ogn1WjkIwoP5ucjoYfYu3qouYw3vVIi/Amu0/xZ4/wsg==}
+    peerDependencies:
+      react: ^18.2.0
+      react-dom: ^18.2.0
 
   react@19.3.0:
     resolution: {integrity: sha512-E8LUcbtBWt20bbl2YoHfx4ZDBdxVTfOKtCZn9cDSJ4l6/nuoApcpIBcj47t2wZoVX8g2ZHuMHbiShgCR1T5Sog==}
@@ -2700,6 +2709,11 @@ snapshots:
       scheduler: 0.28.0
 
   react-refresh@0.17.0: {}
+
+  react-shaders@0.0.4(react-dom@19.3.0(react@19.3.0))(react@19.3.0):
+    dependencies:
+      react: 19.3.0
+      react-dom: 19.3.0(react@19.3.0)
 
   react@19.3.0: {}
 

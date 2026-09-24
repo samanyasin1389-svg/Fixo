@@ -344,6 +344,50 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
     },
   );
 
+  server.tool(
+    "delete_vpn",
+    "Permanently delete a Pasargad VPN account by username (usually phone number).",
+    { username: z.string() },
+    async ({ username }) => {
+      try {
+        const { createPasargadClient } = await import("./pasargad.js");
+        const client = createPasargadClient();
+        if (!client.hasCredentials) {
+          return jsonResult(
+            {
+              status: "error",
+              message:
+                "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+            },
+            false,
+          );
+        }
+        const existing = await client.lookupUser(username);
+        if (!existing) {
+          return jsonResult(
+            { status: "error", message: `اکانت ${username.trim()} پیدا نشد` },
+            false,
+          );
+        }
+        await client.deleteUser(existing.username);
+        return jsonResult({
+          status: "ok",
+          message: `اکانت ${existing.username} پاک شد`,
+          data: { username: existing.username },
+        });
+      } catch (err) {
+        const { PasargadError } = await import("./pasargad.js");
+        if (err instanceof PasargadError) {
+          return jsonResult(
+            { status: "error", message: err.message, detail: err.detail },
+            false,
+          );
+        }
+        return fail(err);
+      }
+    },
+  );
+
   return server;
 }
 

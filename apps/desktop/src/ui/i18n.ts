@@ -1,5 +1,5 @@
 export type Locale = "fa" | "en";
-export type Theme = "night" | "day";
+export type Theme = "night" | "day" | "galaxy";
 
 export type MessageKey =
   | "tagline"
@@ -7,6 +7,8 @@ export type MessageKey =
   | "disconnected"
   | "themeNight"
   | "themeDay"
+  | "themeGalaxy"
+  | "themePicker"
   | "langFa"
   | "langEn"
   | "networkShop"
@@ -71,7 +73,10 @@ export type MessageKey =
   | "vpnLinkCopied"
   | "vpnCopyLink"
   | "vpnBusy"
-  | "vpnStatus";
+  | "vpnStatus"
+  | "vpnDelete"
+  | "vpnDeleted"
+  | "vpnDeleteConfirm";
 
 const fa: Record<MessageKey, string> = {
   tagline: "میزکار تعمیرات؛ شبکه، نصب، بک‌آپ.",
@@ -79,6 +84,8 @@ const fa: Record<MessageKey, string> = {
   disconnected: "قطع",
   themeNight: "شب",
   themeDay: "روز",
+  themeGalaxy: "کهکشان",
+  themePicker: "انتخاب تم",
   langFa: "فا",
   langEn: "EN",
   networkShop: "شبکه مغازه",
@@ -144,6 +151,9 @@ const fa: Record<MessageKey, string> = {
   vpnCopyLink: "کپی لینک",
   vpnBusy: "در حال ساخت…",
   vpnStatus: "وضعیت",
+  vpnDelete: "حذف اکانت",
+  vpnDeleted: "اکانت پاک شد",
+  vpnDeleteConfirm: "اکانت این شماره پاک شود؟",
 };
 
 const en: Record<MessageKey, string> = {
@@ -152,6 +162,8 @@ const en: Record<MessageKey, string> = {
   disconnected: "Disconnected",
   themeNight: "Night",
   themeDay: "Day",
+  themeGalaxy: "Galaxy",
+  themePicker: "Theme",
   langFa: "FA",
   langEn: "EN",
   networkShop: "Shop network",
@@ -217,6 +229,9 @@ const en: Record<MessageKey, string> = {
   vpnCopyLink: "Copy link",
   vpnBusy: "Provisioning…",
   vpnStatus: "Status",
+  vpnDelete: "Delete account",
+  vpnDeleted: "Account deleted",
+  vpnDeleteConfirm: "Delete this account?",
 };
 
 const tables: Record<Locale, Record<MessageKey, string>> = { fa, en };
