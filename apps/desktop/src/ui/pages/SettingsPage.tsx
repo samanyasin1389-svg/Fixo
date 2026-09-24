@@ -31,11 +31,18 @@ export function SettingsPage({
   onShopPassword,
   onSave,
 }: SettingsPageProps) {
+  const themeName =
+    theme === "galaxy"
+      ? t(locale, "themeGalaxy")
+      : theme === "emerald"
+        ? t(locale, "themeEmerald")
+        : t(locale, "themeIce");
+
   return (
     <section className="panel settings-stack">
-      <div>
+      <div className="settings-block settings-theme-block">
         <p className="settings-label">{t(locale, "settingsTheme")}</p>
-        <div className="settings-row">
+        <div className="settings-theme-picker">
           <ThemeFanButton
             theme={theme}
             label={t(locale, "themePicker")}
@@ -46,17 +53,11 @@ export function SettingsPage({
             }}
             onChange={onTheme}
           />
-          <span className="muted">
-            {theme === "galaxy"
-              ? t(locale, "themeGalaxy")
-              : theme === "emerald"
-                ? t(locale, "themeEmerald")
-                : t(locale, "themeIce")}
-          </span>
+          <p className="muted settings-theme-name">{themeName}</p>
         </div>
       </div>
 
-      <div>
+      <div className="settings-block">
         <p className="settings-label">{t(locale, "settingsLanguage")}</p>
         <div className="toggle-group" role="group" aria-label="language">
           <button
@@ -76,7 +77,7 @@ export function SettingsPage({
         </div>
       </div>
 
-      <div>
+      <div className="settings-block">
         <p className="settings-label">{t(locale, "settingsWifi")}</p>
         <div className="settings-box" style={{ marginTop: 0 }}>
           <input
