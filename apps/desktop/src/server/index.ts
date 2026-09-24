@@ -76,7 +76,7 @@ app.put("/api/settings", async (req, res) => {
       ...(typeof shopWifiPassword === "string" ? { shopWifiPassword } : {}),
       ...(typeof openaiModel === "string" ? { openaiModel } : {}),
       ...(typeof autoShopWifi === "boolean" ? { autoShopWifi } : {}),
-      ...(theme === "day" || theme === "night" ? { theme } : {}),
+      ...(theme === "day" || theme === "night" || theme === "galaxy" ? { theme } : {}),
       ...(locale === "fa" || locale === "en" ? { locale } : {}),
     });
     res.json({ ok: true, settings: publicSettings(saved) });
@@ -606,6 +606,54 @@ app.post("/api/vpn/provision", async (req, res) => {
         : push
           ? `${account.message}. وی‌توباکس: ${push.message}`
           : account.message,
+    });
+  } catch (err) {
+    const { PasargadError } = await import("@fixo/mcp-apps");
+    if (err instanceof PasargadError) {
+      res.status(err.statusCode && err.statusCode >= 400 ? err.statusCode : 500).json({
+        ok: false,
+        message: err.message,
+        detail: err.detail,
+      });
+      return;
+    }
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/vpn/delete", async (req, res) => {
+  try {
+    const username = String(req.body?.username ?? "").trim();
+    if (!username) {
+      res.status(400).json({ ok: false, message: "username لازم است" });
+      return;
+    }
+    const { createPasargadClient } = await import("@fixo/mcp-apps");
+    const client = createPasargadClient();
+    if (!client.hasCredentials) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+      });
+      return;
+    }
+    const existing = await client.lookupUser(username);
+    if (!existing) {
+      res.status(404).json({
+        ok: false,
+        message: `اکانت ${username} پیدا نشد`,
+      });
+      return;
+    }
+    await client.deleteUser(existing.username);
+    res.json({
+      ok: true,
+      username: existing.username,
+      message: `اکانت ${existing.username} پاک شد`,
     });
   } catch (err) {
     const { PasargadError } = await import("@fixo/mcp-apps");

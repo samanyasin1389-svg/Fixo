@@ -63,7 +63,6 @@ function findTapPoint(
 async function setClipboard(adb: AdbRunner, serial: string, text: string) {
   const evidence: string[] = [];
   const escaped = text.replace(/'/g, "'\\''");
-  // Prefer cmd clipboard on modern Android; fall back to service call.
   const viaCmd = await shell(
     adb,
     serial,
@@ -97,11 +96,11 @@ async function openV2Box(adb: AdbRunner, serial: string) {
     10_000,
   );
   evidence.push(launch.evidence);
-  if (launch.code !== 0) {
+  if (launch.code !== 0 || /Error|Exception/i.test(launch.stdout + launch.stderr)) {
     const am = await shell(
       adb,
       serial,
-      `am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER ${V2BOX_PACKAGE}`,
+      `am start -a android.intent.action.MAIN -c android.intent.category.LAUNCHER -p ${V2BOX_PACKAGE}`,
       10_000,
     );
     evidence.push(am.evidence);
@@ -110,7 +109,8 @@ async function openV2Box(adb: AdbRunner, serial: string) {
   return { evidence };
 }
 
-async function tryIntentImport(
+/** Package-scoped intents only — never bare VIEW (opens Chrome/Google). */
+async function tryScopedIntentImport(
   adb: AdbRunner,
   serial: string,
   subscriptionUrl: string,
@@ -119,13 +119,12 @@ async function tryIntentImport(
   const encoded = subscriptionUrl.replace(/'/g, "'\\''");
   const attempts = [
     `am start -a android.intent.action.VIEW -d '${encoded}' -p ${V2BOX_PACKAGE}`,
-    `am start -a android.intent.action.VIEW -d '${encoded}'`,
     `am start -a android.intent.action.SEND -t text/plain --es android.intent.extra.TEXT '${encoded}' -p ${V2BOX_PACKAGE}`,
   ];
   for (const cmd of attempts) {
     const r = await shell(adb, serial, cmd, 10_000);
     evidence.push(r.evidence);
-    if (r.code === 0 && !/error|exception|Activity not started/i.test(r.stdout + r.stderr)) {
+    if (r.code === 0 && !/error|exception|Activity not started|Unable to find/i.test(r.stdout + r.stderr)) {
       await sleep(1500);
       return { ok: true, evidence };
     }
@@ -157,7 +156,7 @@ async function tryClipboardUiImport(adb: AdbRunner, serial: string) {
     "چسباندن",
   ];
 
-  for (let round = 0; round < 3; round++) {
+  for (let round = 0; round < 4; round++) {
     const ui = await dumpUi(adb, serial);
     evidence.push(...ui.evidence);
     const clip = findTapPoint(ui.xml, clipLabels);
@@ -188,6 +187,10 @@ export type V2BoxPushResult = {
   evidence: string[];
 };
 
+/**
+ * Push subscription into V2Box only — never open the system browser.
+ * Order: ensure install → clipboard → open V2Box → UIAutomator → scoped intents.
+ */
 export async function pushConfigToV2Box(
   adb: AdbRunner,
   serial: string,
@@ -234,26 +237,14 @@ export async function pushConfigToV2Box(
     };
   }
 
-  const viaIntent = await tryIntentImport(adb, serial, url);
-  evidence.push(...viaIntent.evidence);
-  if (viaIntent.ok) {
-    return {
-      ok: true,
-      packageId: V2BOX_PACKAGE,
-      installed: true,
-      strategy: "intent",
-      message: "کانفیگ به وی‌توباکس ارسال شد",
-      evidence,
-    };
-  }
-
   const clip = await setClipboard(adb, serial, url);
   evidence.push(...clip.evidence);
+
   const opened = await openV2Box(adb, serial);
   evidence.push(...opened.evidence);
+
   const ui = await tryClipboardUiImport(adb, serial);
   evidence.push(...ui.evidence);
-
   if (ui.ok) {
     return {
       ok: true,
@@ -265,7 +256,19 @@ export async function pushConfigToV2Box(
     };
   }
 
-  // Clipboard may still be enough if the technician taps import manually.
+  const viaIntent = await tryScopedIntentImport(adb, serial, url);
+  evidence.push(...viaIntent.evidence);
+  if (viaIntent.ok) {
+    return {
+      ok: true,
+      packageId: V2BOX_PACKAGE,
+      installed: true,
+      strategy: "scoped_intent",
+      message: "کانفیگ به وی‌توباکس ارسال شد",
+      evidence,
+    };
+  }
+
   return {
     ok: clip.ok,
     packageId: V2BOX_PACKAGE,

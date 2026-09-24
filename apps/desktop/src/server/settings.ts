@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-export type FixoTheme = "night" | "day";
+export type FixoTheme = "night" | "day" | "galaxy";
 export type FixoLocale = "fa" | "en";
 
 export type FixoSettings = {
@@ -28,7 +28,8 @@ function settingsPath() {
 }
 
 function normalizeTheme(value: unknown): FixoTheme {
-  return value === "day" ? "day" : "night";
+  if (value === "day" || value === "galaxy") return value;
+  return "night";
 }
 
 function normalizeLocale(value: unknown): FixoLocale {

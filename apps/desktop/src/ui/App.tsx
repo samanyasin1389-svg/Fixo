@@ -8,6 +8,8 @@ import {
   type Theme,
 } from "./i18n";
 import { ToastHost, useToastQueue } from "./Toast";
+import { AuroraBackground } from "./AuroraBackground";
+import { ThemeOrb } from "./ThemeOrb";
 
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
@@ -165,7 +167,11 @@ export function App() {
       setHealth(h);
       if (s.ok && s.settings) {
         if (s.settings.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
-        if (s.settings.theme === "day" || s.settings.theme === "night") {
+        if (
+          s.settings.theme === "day" ||
+          s.settings.theme === "night" ||
+          s.settings.theme === "galaxy"
+        ) {
           setTheme(s.settings.theme);
         }
         if (s.settings.locale === "fa" || s.settings.locale === "en") {
@@ -548,6 +554,34 @@ export function App() {
     }
   }
 
+  async function deleteVpnAccount() {
+    const target = vpnForm.username.trim();
+    if (!target) {
+      pushToast(t(locale, "vpnNeedFields"), "error");
+      return;
+    }
+    if (!window.confirm(t(locale, "vpnDeleteConfirm"))) return;
+    setBusy(true);
+    try {
+      const res = await fetch("/api/vpn/delete", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ username: target }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        pushToast(data.message ?? "Failed", "error");
+        return;
+      }
+      setVpnResult(null);
+      pushToast(data.message ?? t(locale, "vpnDeleted"), "success");
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function send(confirmAction = false) {
     const text = (inputRef.current?.value ?? input).trim();
     if (!confirmAction && !text) return;
@@ -598,6 +632,7 @@ export function App() {
   return (
     <div className="app">
       <ToastHost toasts={toasts} onDismiss={dismissToast} />
+      {theme === "galaxy" ? <AuroraBackground /> : null}
       <div className="atmosphere" aria-hidden="true" />
       <header className="brand">
         <div className="brand-top">
@@ -616,22 +651,16 @@ export function App() {
               <span className="connect-dot" />
               {phoneConnected ? t(locale, "connected") : t(locale, "disconnected")}
             </span>
-            <div className="toggle-group" role="group" aria-label="theme">
-              <button
-                type="button"
-                className={theme === "night" ? "active" : "secondary"}
-                onClick={() => void changeTheme("night")}
-              >
-                {t(locale, "themeNight")}
-              </button>
-              <button
-                type="button"
-                className={theme === "day" ? "active" : "secondary"}
-                onClick={() => void changeTheme("day")}
-              >
-                {t(locale, "themeDay")}
-              </button>
-            </div>
+            <ThemeOrb
+              theme={theme}
+              label={t(locale, "themePicker")}
+              labels={{
+                night: t(locale, "themeNight"),
+                day: t(locale, "themeDay"),
+                galaxy: t(locale, "themeGalaxy"),
+              }}
+              onChange={(next) => void changeTheme(next)}
+            />
             <div className="toggle-group" role="group" aria-label="language">
               <button
                 type="button"
@@ -912,15 +941,34 @@ export function App() {
                     {vpnResult.subscriptionUrl ? (
                       <>
                         <p className="muted tiny">{vpnResult.subscriptionUrl}</p>
-                        <button
-                          type="button"
-                          className="secondary"
-                          onClick={() => void copyVpnLink()}
-                        >
-                          {t(locale, "vpnCopyLink")}
-                        </button>
+                        <div className="actions">
+                          <button
+                            type="button"
+                            className="secondary"
+                            onClick={() => void copyVpnLink()}
+                          >
+                            {t(locale, "vpnCopyLink")}
+                          </button>
+                          <button
+                            type="button"
+                            className="secondary"
+                            disabled={busy || !vpnForm.username.trim()}
+                            onClick={() => void deleteVpnAccount()}
+                          >
+                            {t(locale, "vpnDelete")}
+                          </button>
+                        </div>
                       </>
-                    ) : null}
+                    ) : (
+                      <button
+                        type="button"
+                        className="secondary"
+                        disabled={busy || !vpnForm.username.trim()}
+                        onClick={() => void deleteVpnAccount()}
+                      >
+                        {t(locale, "vpnDelete")}
+                      </button>
+                    )}
                   </div>
                 ) : null}
               </div>
