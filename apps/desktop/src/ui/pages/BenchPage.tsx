@@ -124,7 +124,7 @@ export function BenchPage(props: BenchPageProps) {
   const pinned = catalog.filter((a) => a.pinned !== false).slice(0, 4);
 
   return (
-    <aside className="panel panel-side" style={{ width: "100%", maxWidth: 560 }}>
+    <aside className="panel panel-side">
       <h2>{t(locale, "networkShop")}</h2>
       <div className="status-card">
         <div className="status-row">

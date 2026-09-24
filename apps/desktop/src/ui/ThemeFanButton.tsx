@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState, type CSSProperties } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import type { Theme } from "./i18n";
 
 type ThemeFanButtonProps = {
@@ -8,11 +8,7 @@ type ThemeFanButtonProps = {
   labels: Record<Theme, string>;
 };
 
-const SWATCHES: { id: Theme; angle: number }[] = [
-  { id: "galaxy", angle: -42 },
-  { id: "emerald", angle: 0 },
-  { id: "ice", angle: 42 },
-];
+const SWATCHES: Theme[] = ["galaxy", "emerald", "ice"];
 
 export function ThemeFanButton({ theme, onChange, label, labels }: ThemeFanButtonProps) {
   const [open, setOpen] = useState(false);
@@ -51,6 +47,24 @@ export function ThemeFanButton({ theme, onChange, label, labels }: ThemeFanButto
       ref={wrapRef}
       className={`theme-fan${open ? " open" : ""}${spinning ? " spinning" : ""}`}
     >
+      <div id={menuId} className="theme-fan-menu" role="menu" aria-label={label}>
+        {SWATCHES.map((id) => (
+          <button
+            key={id}
+            type="button"
+            role="menuitemradio"
+            aria-checked={theme === id}
+            className={`theme-fan-swatch theme-${id}${theme === id ? " active" : ""}`}
+            title={labels[id]}
+            onClick={() => {
+              onChange(id);
+              setOpen(false);
+            }}
+          >
+            <span className="visually-hidden">{labels[id]}</span>
+          </button>
+        ))}
+      </div>
       <button
         type="button"
         className={`theme-fan-core theme-${theme}${spinning ? " spin" : ""}`}
@@ -59,25 +73,6 @@ export function ThemeFanButton({ theme, onChange, label, labels }: ThemeFanButto
         aria-controls={menuId}
         onClick={toggle}
       />
-      <div id={menuId} className="theme-fan-menu" role="menu" aria-label={label}>
-        {SWATCHES.map((s) => (
-          <button
-            key={s.id}
-            type="button"
-            role="menuitemradio"
-            aria-checked={theme === s.id}
-            className={`theme-fan-swatch theme-${s.id}${theme === s.id ? " active" : ""}`}
-            style={{ "--fan-angle": `${s.angle}deg` } as CSSProperties}
-            title={labels[s.id]}
-            onClick={() => {
-              onChange(s.id);
-              setOpen(false);
-            }}
-          >
-            <span className="visually-hidden">{labels[s.id]}</span>
-          </button>
-        ))}
-      </div>
     </div>
   );
 }
