@@ -88,7 +88,13 @@ export type MessageKey =
   | "vpnDeleted"
   | "vpnDeleteConfirm"
   | "settingsTheme"
-  | "settingsLanguage";
+  | "settingsLanguage"
+  | "voiceTalk"
+  | "voiceListening"
+  | "voiceHint"
+  | "voiceUnsupported"
+  | "voiceDenied"
+  | "voiceError";
 
 const fa: Record<MessageKey, string> = {
   tagline: "میزکار تعمیرات؛ شبکه، نصب، بک‌آپ.",
@@ -143,7 +149,7 @@ const fa: Record<MessageKey, string> = {
   send: "ارسال",
   sending: "...",
   chatPlaceholder: "مثلاً: وای‌فای را روشن کن / تلگرام نصب کن",
-  welcome: "سلام. وای‌فای، نصب از پلی، یا بک‌آپ را بگو.",
+  welcome: "سلام. با میکروفون یا تایپ بگو: وای‌فای، نصب از پلی، بک‌آپ، یا یادداشت.",
   sourceModelSearch: "جستجوی مدل‌محور",
   sourceLocalApk: "فایل APK روی لپ‌تاپ",
   sourceGithub: "گیت‌هاب",
@@ -177,6 +183,12 @@ const fa: Record<MessageKey, string> = {
   vpnDeleteConfirm: "اکانت این شماره پاک شود؟",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
+  voiceTalk: "صحبت با ایجنت",
+  voiceListening: "دارم گوش می‌دم…",
+  voiceHint: "میکروفون را بزن؛ نصب، بک‌آپ، وای‌فای و بقیه را با صدا بگو.",
+  voiceUnsupported: "مرورگر از تشخیص گفتار پشتیبانی نمی‌کند (Chrome را امتحان کن).",
+  voiceDenied: "دسترسی میکروفون رد شد.",
+  voiceError: "تشخیص گفتار خطا داد. دوباره امتحان کن.",
 };
 
 const en: Record<MessageKey, string> = {
@@ -232,7 +244,7 @@ const en: Record<MessageKey, string> = {
   send: "Send",
   sending: "...",
   chatPlaceholder: "e.g. turn Wi‑Fi on / install Telegram",
-  welcome: "Hi. Ask for shop Wi‑Fi, Play install, or a backup.",
+  welcome: "Hi. Use the mic or type: shop Wi‑Fi, Play install, backup, or a note.",
   sourceModelSearch: "Model search",
   sourceLocalApk: "Local APK on laptop",
   sourceGithub: "GitHub",
@@ -266,6 +278,12 @@ const en: Record<MessageKey, string> = {
   vpnDeleteConfirm: "Delete this account?",
   settingsTheme: "Appearance",
   settingsLanguage: "Language",
+  voiceTalk: "Talk to agent",
+  voiceListening: "Listening…",
+  voiceHint: "Tap the mic — say install, backup, Wi‑Fi, and more.",
+  voiceUnsupported: "Speech recognition needs Chrome (or a Chromium browser).",
+  voiceDenied: "Microphone permission denied.",
+  voiceError: "Speech recognition failed. Try again.",
 };
 
 const tables: Record<Locale, Record<MessageKey, string>> = { fa, en };

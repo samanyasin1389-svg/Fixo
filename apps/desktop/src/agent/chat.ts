@@ -1,6 +1,9 @@
 import { createOpenAI } from "@ai-sdk/openai";
 import { generateText, tool } from "ai";
 import { z } from "zod";
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import type { AdbRunner } from "@fixo/mcp-network";
 import {
   AdbError,
@@ -621,16 +624,44 @@ export async function handleChat(input: {
         }
       },
     }),
+    create_shop_note: tool({
+      description:
+        "Create a text note/file on the repair laptop under Desktop/Fixo-Notes. Use when technician asks to write/save a note, rem, or file (یادداشت / فایل / یادآوری).",
+      parameters: z.object({
+        title: z.string().min(1).describe("Short file title, used in the filename"),
+        content: z.string().min(1).describe("Full note body"),
+      }),
+      execute: async ({ title, content }) => {
+        const safe =
+          title
+            .replace(/[^\p{L}\p{N}\s_-]+/gu, "")
+            .trim()
+            .slice(0, 60)
+            .replace(/\s+/g, "-") || "note";
+        const stamp = new Date().toISOString().slice(0, 19).replace(/[:T]/g, "-");
+        const dir = path.join(os.homedir(), "Desktop", "Fixo-Notes");
+        await fs.mkdir(dir, { recursive: true });
+        const file = path.join(dir, `${stamp}-${safe}.txt`);
+        await fs.writeFile(file, content, "utf8");
+        return toolJson({
+          ok: true,
+          path: file,
+          message: `یادداشت ذخیره شد: ${file}`,
+        });
+      },
+    }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, delete_vpn.
+کاربر ممکن است با میکروفون/صدا دستور بدهد — همان دستورهای صوتی را مثل متن جدی بگیر و ابزار بزن.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, delete_vpn, create_shop_note.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس: از provision_vpn با username + days + gigabytes استفاده کن. اگر هر کدام نبود بپرس؛ مقدار از خودت نساز.
 اگر گفت اکانت وی‌پی‌ان / پاسارگاد فلان شماره را پاک کن یا حذف کن: delete_vpn را با همان username بزن.
+اگر گفت یادداشت/فایل/یادآوری بساز یا بنویس: create_shop_note را با title و content بزن (روی Desktop/Fixo-Notes ذخیره می‌شود).
 جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس.`;
 
   let messages = input.messages.map((m) => ({

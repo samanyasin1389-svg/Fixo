@@ -588,8 +588,11 @@ export function App() {
     }
   }
 
-  async function send(confirmAction = false) {
-    const text = (inputRef.current?.value ?? input).trim();
+  async function send(
+    confirmAction = false,
+    opts?: { fromVoice?: boolean; text?: string },
+  ) {
+    const text = (opts?.text ?? inputRef.current?.value ?? input).trim();
     if (!confirmAction && !text) return;
     setBusy(true);
     setError(null);
@@ -621,8 +624,41 @@ export function App() {
         pushToast(msg, "error");
         return;
       }
-      setMessages((prev) => [...prev, { role: "assistant", content: data.reply ?? "" }]);
-      setPendingAction(data.pendingAction ?? null);
+
+      const assistantReply = data.reply ?? "";
+      const withAssistant = [
+        ...nextMessages,
+        { role: "assistant" as const, content: assistantReply },
+      ];
+      setMessages(withAssistant);
+
+      if (opts?.fromVoice && data.pendingAction) {
+        pushToast(data.pendingAction.label, "info");
+        const res2 = await fetch("/api/chat", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            messages: withAssistant,
+            deviceSerial: selectedSerial || undefined,
+            confirmAction: true,
+          }),
+        });
+        const data2 = await res2.json();
+        if (!data2.ok) {
+          const msg = data2.message ?? "Chat error";
+          setError(msg);
+          pushToast(msg, "error");
+          setPendingAction(data.pendingAction ?? null);
+          return;
+        }
+        setMessages((prev) => [
+          ...prev,
+          { role: "assistant", content: data2.reply ?? "" },
+        ]);
+        setPendingAction(data2.pendingAction ?? null);
+      } else {
+        setPendingAction(data.pendingAction ?? null);
+      }
       await refresh();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -631,6 +667,24 @@ export function App() {
     } finally {
       setBusy(false);
     }
+  }
+
+  function sendVoice(text: string) {
+    const trimmed = text.trim();
+    if (!trimmed || busy) return;
+    void send(false, { fromVoice: true, text: trimmed });
+  }
+
+  function onVoiceError(code: string) {
+    if (code === "unsupported") {
+      pushToast(t(locale, "voiceUnsupported"), "error");
+      return;
+    }
+    if (code === "not-allowed") {
+      pushToast(t(locale, "voiceDenied"), "error");
+      return;
+    }
+    pushToast(t(locale, "voiceError"), "error");
   }
 
   const navLabels = {
@@ -688,7 +742,9 @@ export function App() {
               busy={busy}
               onInput={setInput}
               onSend={(confirm) => void send(confirm)}
+              onVoiceSend={sendVoice}
               onCancelPending={() => setPendingAction(null)}
+              onVoiceError={onVoiceError}
             />
           ) : null}
 
