@@ -1,15 +1,21 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   MANUAL_SOURCE_IDS,
+  TAB_ORDER,
   dirFor,
   sourceLabel,
   t,
+  type AppTab,
   type Locale,
   type Theme,
 } from "./i18n";
 import { ToastHost, useToastQueue } from "./Toast";
 import { AuroraBackground } from "./AuroraBackground";
-import { ThemeOrb } from "./ThemeOrb";
+import { NavPill } from "./NavPill";
+import { HomePage } from "./pages/HomePage";
+import { AgentPage } from "./pages/AgentPage";
+import { BenchPage } from "./pages/BenchPage";
+import { SettingsPage } from "./pages/SettingsPage";
 
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
@@ -48,16 +54,6 @@ type BackupJob = {
   currentTarget?: string;
 };
 
-function pillClass(v: boolean | null) {
-  if (v === null) return "pill unknown";
-  return v ? "pill on" : "pill off";
-}
-
-function pillLabel(v: boolean | null) {
-  if (v === null) return "—";
-  return v ? "ON" : "OFF";
-}
-
 function applyDocumentChrome(theme: Theme, locale: Locale) {
   const root = document.documentElement;
   root.setAttribute("data-theme", theme);
@@ -66,8 +62,10 @@ function applyDocumentChrome(theme: Theme, locale: Locale) {
 }
 
 export function App() {
-  const [theme, setTheme] = useState<Theme>("night");
+  const [theme, setTheme] = useState<Theme>("galaxy");
   const [locale, setLocale] = useState<Locale>("fa");
+  const [activeTab, setActiveTab] = useState<AppTab>("home");
+  const [slideDir, setSlideDir] = useState<"next" | "prev">("next");
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceSerial, setDeviceSerial] = useState("");
   const [network, setNetwork] = useState<NetworkStatus | null>(null);
@@ -80,7 +78,6 @@ export function App() {
   const [shopSsid, setShopSsid] = useState("nibero");
   const [shopPassword, setShopPassword] = useState("");
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
-  const [showSettings, setShowSettings] = useState(false);
   const { toasts, pushToast, dismissToast } = useToastQueue();
   const [catalog, setCatalog] = useState<CatalogApp[]>([]);
   const [appsOpen, setAppsOpen] = useState(true);
@@ -129,6 +126,16 @@ export function App() {
     [locale],
   );
 
+  const dir = dirFor(locale);
+
+  function goTab(next: AppTab) {
+    const from = TAB_ORDER.indexOf(activeTab);
+    const to = TAB_ORDER.indexOf(next);
+    if (from === to) return;
+    setSlideDir(to > from ? "next" : "prev");
+    setActiveTab(next);
+  }
+
   useEffect(() => {
     applyDocumentChrome(theme, locale);
   }, [theme, locale]);
@@ -168,9 +175,9 @@ export function App() {
       if (s.ok && s.settings) {
         if (s.settings.shopWifiSsid) setShopSsid(s.settings.shopWifiSsid);
         if (
-          s.settings.theme === "day" ||
-          s.settings.theme === "night" ||
-          s.settings.theme === "galaxy"
+          s.settings.theme === "galaxy" ||
+          s.settings.theme === "emerald" ||
+          s.settings.theme === "ice"
         ) {
           setTheme(s.settings.theme);
         }
@@ -301,7 +308,6 @@ export function App() {
     );
   }
 
-  /** One-click Google Play only — no source dialogs */
   async function installFromPlayDirect(apps: CatalogApp[]) {
     if (!apps.length) return;
     setBusy(true);
@@ -432,7 +438,7 @@ export function App() {
 
   async function startBackup() {
     setBusy(true);
-        setError(null);
+    setError(null);
     try {
       const res = await fetch("/api/backup", {
         method: "POST",
@@ -627,7 +633,12 @@ export function App() {
     }
   }
 
-  const pinned = catalog.filter((a) => a.pinned !== false).slice(0, 4);
+  const navLabels = {
+    home: t(locale, "navHome"),
+    agent: t(locale, "navAgent"),
+    bench: t(locale, "navBench"),
+    settings: t(locale, "navSettings"),
+  };
 
   return (
     <div className="app">
@@ -643,526 +654,109 @@ export function App() {
           <div className="toolbar">
             <span
               className={
-                phoneConnected
-                  ? "connect-badge on pulse"
-                  : "connect-badge off"
+                phoneConnected ? "connect-badge on pulse" : "connect-badge off"
               }
             >
               <span className="connect-dot" />
               {phoneConnected ? t(locale, "connected") : t(locale, "disconnected")}
             </span>
-            <ThemeOrb
-              theme={theme}
-              label={t(locale, "themePicker")}
-              labels={{
-                night: t(locale, "themeNight"),
-                day: t(locale, "themeDay"),
-                galaxy: t(locale, "themeGalaxy"),
-              }}
-              onChange={(next) => void changeTheme(next)}
-            />
-            <div className="toggle-group" role="group" aria-label="language">
-              <button
-                type="button"
-                className={locale === "fa" ? "active" : "secondary"}
-                onClick={() => void changeLocale("fa")}
-              >
-                {t(locale, "langFa")}
-              </button>
-              <button
-                type="button"
-                className={locale === "en" ? "active" : "secondary"}
-                onClick={() => void changeLocale("en")}
-              >
-                {t(locale, "langEn")}
-              </button>
-            </div>
           </div>
         </div>
         <p className="brand-tagline">{t(locale, "tagline")}</p>
       </header>
 
-      <div className="layout">
-        <aside className="panel panel-side">
-          <h2>{t(locale, "networkShop")}</h2>
-          <div className="status-card">
-            <div className="status-row">
-              <span>ADB</span>
-              <span className="pill unknown">{devices.length}</span>
-            </div>
-            <div className="status-row">
-              <span>{t(locale, "wifi")}</span>
-              <span className={pillClass(network?.wifiEnabled ?? null)}>
-                {pillLabel(network?.wifiEnabled ?? null)}
-              </span>
-            </div>
-            <div className="status-row">
-              <span>{t(locale, "network")}</span>
-              <span className="pill unknown">{network?.wifiSsid || "—"}</span>
-            </div>
-          </div>
-
-          {devices.length > 1 ? (
-            <select
-              value={selectedSerial}
-              onChange={(e) => setDeviceSerial(e.target.value)}
-              className="field"
-            >
-              <option value="">{t(locale, "auto")}</option>
-              {devices.map((d) => (
-                <option key={d.serial} value={d.serial}>
-                  {d.serial}
-                </option>
-              ))}
-            </select>
-          ) : null}
-
-          <div className="actions">
-            <button type="button" disabled={busy} onClick={() => void toggleWifi(true)}>
-              {t(locale, "onPlus")} {health?.shopWifiSsid || "nibero"}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void toggleWifi(false)}
-            >
-              {t(locale, "off")}
-            </button>
-            <button
-              type="button"
-              className="secondary"
-              disabled={busy}
-              onClick={() => void shopWifi("forget")}
-            >
-              {t(locale, "forgetShop")}
-            </button>
-          </div>
-          {actionMsg ? <p className="muted">{actionMsg}</p> : null}
-
-          <div className="section-gap">
-            <button
-              type="button"
-              className="disclosure"
-              onClick={() => setAppsOpen((v) => !v)}
-            >
-              <span>
-                {t(locale, "apps")} ({catalog.length})
-              </span>
-              <span className="chevron">{appsOpen ? "▾" : "◂"}</span>
-            </button>
-
-            {appsOpen ? (
-              <div className="apps-body">
-                <div className="app-grid">
-                  {(pinned.length ? pinned : catalog.slice(0, 4)).map((app) => (
-                    <button
-                      key={app.packageId}
-                      type="button"
-                      className="app-btn"
-                      disabled={busy}
-                      onClick={() => void installFromPlayDirect([app])}
-                    >
-                      {app.label}
-                    </button>
-                  ))}
-                </div>
-
-                <div className="catalog-list">
-                  {catalog.map((app) => (
-                    <label key={app.id} className="catalog-row">
-                      <input
-                        type="checkbox"
-                        checked={selectedApps.includes(app.packageId)}
-                        onChange={() => toggleAppSelect(app.packageId)}
-                      />
-                      <span>{app.label}</span>
-                      <span className="muted tiny">{app.packageId}</span>
-                    </label>
-                  ))}
-                </div>
-
-                <div className="actions">
-                  <button
-                    type="button"
-                    disabled={busy || !selectedApps.length}
-                    onClick={() =>
-                      void installFromPlayDirect(
-                        catalog.filter((a) => selectedApps.includes(a.packageId)),
-                      )
-                    }
-                  >
-                    {t(locale, "installSelected")}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={busy}
-                    onClick={() => setShowAddApp((v) => !v)}
-                  >
-                    {showAddApp ? t(locale, "closeForm") : t(locale, "addApp")}
-                  </button>
-                </div>
-
-                {showAddApp ? (
-                  <div className="settings-box">
-                    <input
-                      className="field"
-                      placeholder={t(locale, "displayName")}
-                      value={newApp.label}
-                      onChange={(e) => setNewApp((s) => ({ ...s, label: e.target.value }))}
-                    />
-                    <input
-                      className="field"
-                      placeholder={t(locale, "packageId")}
-                      value={newApp.packageId}
-                      onChange={(e) =>
-                        setNewApp((s) => ({ ...s, packageId: e.target.value }))
-                      }
-                    />
-                    <input
-                      className="field"
-                      placeholder={t(locale, "localApkOptional")}
-                      value={newApp.localApkPath}
-                      onChange={(e) =>
-                        setNewApp((s) => ({ ...s, localApkPath: e.target.value }))
-                      }
-                    />
-                    <input
-                      className="field"
-                      placeholder={t(locale, "githubOptional")}
-                      value={newApp.githubRepo}
-                      onChange={(e) =>
-                        setNewApp((s) => ({ ...s, githubRepo: e.target.value }))
-                      }
-                    />
-                    <input
-                      className="field"
-                      placeholder={t(locale, "apkUrlOptional")}
-                      value={newApp.apkUrl}
-                      onChange={(e) => setNewApp((s) => ({ ...s, apkUrl: e.target.value }))}
-                    />
-                    <button type="button" disabled={busy} onClick={() => void addCatalogApp()}>
-                      {t(locale, "saveCatalog")}
-                    </button>
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="section-gap">
-            <button
-              type="button"
-              className="disclosure"
-              onClick={() => setVpnOpen((v) => !v)}
-            >
-              <span>{t(locale, "vpnSection")}</span>
-              <span className="chevron">{vpnOpen ? "▾" : "◂"}</span>
-            </button>
-            {vpnOpen ? (
-              <div className="vpn-body">
-                <div className="suggest-chips">
-                  <button
-                    type="button"
-                    className="secondary chip"
-                    onClick={() =>
-                      setVpnForm((s) => ({ ...s, days: "30", gigabytes: "30" }))
-                    }
-                  >
-                    {t(locale, "vpnSuggest30")}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary chip"
-                    onClick={() =>
-                      setVpnForm((s) => ({ ...s, days: "30", gigabytes: "50" }))
-                    }
-                  >
-                    {t(locale, "vpnSuggest50")}
-                  </button>
-                  <button
-                    type="button"
-                    className="secondary chip"
-                    onClick={() =>
-                      setVpnForm((s) => ({ ...s, days: "90", gigabytes: "100" }))
-                    }
-                  >
-                    {t(locale, "vpnSuggest100")}
-                  </button>
-                </div>
-                <input
-                  className="field"
-                  placeholder={t(locale, "vpnUsername")}
-                  value={vpnForm.username}
-                  onChange={(e) =>
-                    setVpnForm((s) => ({ ...s, username: e.target.value }))
-                  }
-                />
-                <input
-                  className="field"
-                  type="number"
-                  min={1}
-                  placeholder={t(locale, "vpnDays")}
-                  value={vpnForm.days}
-                  onChange={(e) => setVpnForm((s) => ({ ...s, days: e.target.value }))}
-                />
-                <input
-                  className="field"
-                  type="number"
-                  min={1}
-                  placeholder={t(locale, "vpnGigabytes")}
-                  value={vpnForm.gigabytes}
-                  onChange={(e) =>
-                    setVpnForm((s) => ({ ...s, gigabytes: e.target.value }))
-                  }
-                />
-                <button
-                  type="button"
-                  disabled={
-                    busy ||
-                    !vpnForm.username.trim() ||
-                    !vpnForm.days.trim() ||
-                    !vpnForm.gigabytes.trim()
-                  }
-                  onClick={() => void provisionVpn()}
-                >
-                  {t(locale, "vpnProvision")}
-                </button>
-                {vpnResult ? (
-                  <div className="vpn-result">
-                    <p className="muted">
-                      {t(locale, "vpnStatus")}: {vpnResult.status ?? "—"}
-                      {vpnResult.action ? ` (${vpnResult.action})` : ""}
-                    </p>
-                    {vpnResult.message ? (
-                      <p className="muted tiny">{vpnResult.message}</p>
-                    ) : null}
-                    {vpnResult.subscriptionUrl ? (
-                      <>
-                        <p className="muted tiny">{vpnResult.subscriptionUrl}</p>
-                        <div className="actions">
-                          <button
-                            type="button"
-                            className="secondary"
-                            onClick={() => void copyVpnLink()}
-                          >
-                            {t(locale, "vpnCopyLink")}
-                          </button>
-                          <button
-                            type="button"
-                            className="secondary"
-                            disabled={busy || !vpnForm.username.trim()}
-                            onClick={() => void deleteVpnAccount()}
-                          >
-                            {t(locale, "vpnDelete")}
-                          </button>
-                        </div>
-                      </>
-                    ) : (
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={busy || !vpnForm.username.trim()}
-                        onClick={() => void deleteVpnAccount()}
-                      >
-                        {t(locale, "vpnDelete")}
-                      </button>
-                    )}
-                  </div>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <div className="section-gap">
-            <button
-              type="button"
-              className="disclosure"
-              onClick={() => setManualOpen((v) => !v)}
-            >
-              <span>{t(locale, "manualInstall")}</span>
-              <span className="chevron">{manualOpen ? "▾" : "◂"}</span>
-            </button>
-            {manualOpen ? (
-              <div className="apps-body manual-box">
-                <p className="muted">{t(locale, "manualInstallHint")}</p>
-                {manualTargets.length ? (
-                  <p className="muted tiny">
-                    {manualTargets.map((a) => a.label).join(" · ")}
-                  </p>
-                ) : null}
-                <div className="source-list">
-                  {manualSourceOptions.map((opt) => (
-                    <button
-                      key={opt.id}
-                      type="button"
-                      className={
-                        manualSource === opt.id ? "source-btn active" : "source-btn"
-                      }
-                      onClick={() => setManualSource(opt.id)}
-                    >
-                      {opt.label}
-                    </button>
-                  ))}
-                </div>
-                <div className="actions">
-                  <button
-                    type="button"
-                    disabled={busy}
-                    onClick={() => void runManualInstall()}
-                  >
-                    {t(locale, "runManual")}
-                  </button>
-                </div>
-              </div>
-            ) : null}
-          </div>
-
-          <div className="section-gap">
-            <h2>{t(locale, "backupPhone")}</h2>
-            <p className="muted">{t(locale, "backupHint")}</p>
-            <button type="button" disabled={busy} onClick={() => void startBackup()}>
-              {t(locale, "startBackup")}
-            </button>
-
-            {backupJob ? (
-              <div className="backup-box">
-                <div className="progress-track">
-                  <div
-                    className="progress-fill"
-                    style={{ width: `${Math.max(4, backupJob.percent)}%` }}
-                  />
-                </div>
-                <p className="muted">
-                  {backupJob.message}
-                  {backupJob.currentTarget ? ` — ${backupJob.currentTarget}` : ""}
-                  {` (${backupJob.percent}%)`}
-                </p>
-                <div className="actions">
-                  {backupJob.phase === "paused" ? (
-                    <button
-                      type="button"
-                      className="secondary"
-                      onClick={() => void backupAction("resume")}
-                    >
-                      {t(locale, "resume")}
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className="secondary"
-                      disabled={["done", "cancelled", "error", "cancelling"].includes(
-                        backupJob.phase,
-                      )}
-                      onClick={() => void backupAction("pause")}
-                    >
-                      {t(locale, "pause")}
-                    </button>
-                  )}
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={["done", "cancelled", "error"].includes(backupJob.phase)}
-                    onClick={() => void backupAction("cancel")}
-                  >
-                    {t(locale, "cancel")}
-                  </button>
-                </div>
-                {backupJob.phase === "done" && backupJob.folder ? (
-                  <p className="muted tiny">{backupJob.folder}</p>
-                ) : null}
-              </div>
-            ) : null}
-          </div>
-
-          <button
-            type="button"
-            className="secondary"
-            style={{ width: "100%", marginTop: 14 }}
-            onClick={() => setShowSettings((v) => !v)}
-          >
-            {showSettings ? t(locale, "closeSettings") : t(locale, "settingsWifi")}
-          </button>
-
-          {showSettings ? (
-            <div className="settings-box">
-              <input
-                className="field"
-                value={shopSsid}
-                onChange={(e) => setShopSsid(e.target.value)}
-                placeholder={t(locale, "ssid")}
-              />
-              <input
-                className="field"
-                type="password"
-                value={shopPassword}
-                onChange={(e) => setShopPassword(e.target.value)}
-                placeholder={
-                  health?.hasShopWifiPassword
-                    ? t(locale, "passwordNew")
-                    : t(locale, "passwordShop")
-                }
-              />
-              <button type="button" disabled={busy} onClick={() => void saveShopSettings()}>
-                {t(locale, "save")}
-              </button>
-              {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
-            </div>
-          ) : null}
-
-          {error ? <p className="error">{error}</p> : null}
-        </aside>
-
-        <section className="panel chat panel-chat">
-          <h2>{t(locale, "chat")}</h2>
-          <div className="messages">
-            {messages.map((m, i) => (
-              <div key={i} className={`bubble ${m.role}`}>
-                {m.content}
-              </div>
-            ))}
-          </div>
-
-          {pendingAction ? (
-            <div className="confirm">
-              <span>{pendingAction.label}</span>
-              <div className="actions">
-                <button type="button" disabled={busy} onClick={() => void send(true)}>
-                  {t(locale, "confirm")}
-                </button>
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={busy}
-                  onClick={() => setPendingAction(null)}
-                >
-                  {t(locale, "cancel")}
-                </button>
-              </div>
-            </div>
-          ) : null}
-
-          <div className="composer">
-            <textarea
-              ref={inputRef}
-              value={input}
-              placeholder={t(locale, "chatPlaceholder")}
-              onChange={(e) => setInput(e.target.value)}
-              onInput={(e) => setInput((e.target as HTMLTextAreaElement).value)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" && !e.shiftKey) {
-                  e.preventDefault();
-                  void send(false);
-                }
-              }}
+      <div className="tab-stage" key={activeTab}>
+        <div className={`tab-panel dir-${slideDir}`}>
+          {activeTab === "home" ? (
+            <HomePage
+              locale={locale}
+              phoneConnected={phoneConnected}
+              deviceCount={devices.length}
+              wifiSsid={network?.wifiSsid}
+              shopSsid={health?.shopWifiSsid || shopSsid}
+              onGo={goTab}
             />
-            <button type="button" disabled={busy} onClick={() => void send(false)}>
-              {busy ? t(locale, "sending") : t(locale, "send")}
-            </button>
-          </div>
-        </section>
+          ) : null}
+
+          {activeTab === "agent" ? (
+            <AgentPage
+              locale={locale}
+              messages={messages}
+              pendingAction={pendingAction}
+              input={input}
+              inputRef={inputRef}
+              busy={busy}
+              onInput={setInput}
+              onSend={(confirm) => void send(confirm)}
+              onCancelPending={() => setPendingAction(null)}
+            />
+          ) : null}
+
+          {activeTab === "bench" ? (
+            <BenchPage
+              locale={locale}
+              devices={devices}
+              selectedSerial={selectedSerial}
+              network={network}
+              shopWifiSsid={health?.shopWifiSsid || shopSsid}
+              catalog={catalog}
+              appsOpen={appsOpen}
+              selectedApps={selectedApps}
+              showAddApp={showAddApp}
+              newApp={newApp}
+              manualOpen={manualOpen}
+              manualSource={manualSource}
+              manualTargets={manualTargets}
+              manualSourceOptions={manualSourceOptions}
+              vpnOpen={vpnOpen}
+              vpnForm={vpnForm}
+              vpnResult={vpnResult}
+              backupJob={backupJob}
+              busy={busy}
+              actionMsg={actionMsg}
+              error={error}
+              onDeviceSerial={setDeviceSerial}
+              onToggleWifi={(enabled) => void toggleWifi(enabled)}
+              onShopWifiForget={() => void shopWifi("forget")}
+              onAppsOpen={setAppsOpen}
+              onToggleAppSelect={toggleAppSelect}
+              onInstallPlay={(apps) => void installFromPlayDirect(apps)}
+              onShowAddApp={setShowAddApp}
+              onNewApp={(patch) => setNewApp((s) => ({ ...s, ...patch }))}
+              onAddCatalogApp={() => void addCatalogApp()}
+              onVpnOpen={setVpnOpen}
+              onVpnForm={(patch) => setVpnForm((s) => ({ ...s, ...patch }))}
+              onProvisionVpn={() => void provisionVpn()}
+              onCopyVpnLink={() => void copyVpnLink()}
+              onDeleteVpn={() => void deleteVpnAccount()}
+              onManualOpen={setManualOpen}
+              onManualSource={setManualSource}
+              onRunManual={() => void runManualInstall()}
+              onStartBackup={() => void startBackup()}
+              onBackupAction={(action) => void backupAction(action)}
+            />
+          ) : null}
+
+          {activeTab === "settings" ? (
+            <SettingsPage
+              locale={locale}
+              theme={theme}
+              shopSsid={shopSsid}
+              shopPassword={shopPassword}
+              hasShopWifiPassword={Boolean(health?.hasShopWifiPassword)}
+              settingsMsg={settingsMsg}
+              busy={busy}
+              onTheme={(next) => void changeTheme(next)}
+              onLocale={(next) => void changeLocale(next)}
+              onShopSsid={setShopSsid}
+              onShopPassword={setShopPassword}
+              onSave={() => void saveShopSettings()}
+            />
+          ) : null}
+        </div>
       </div>
+
+      <NavPill active={activeTab} onChange={goTab} labels={navLabels} dir={dir} />
     </div>
   );
 }

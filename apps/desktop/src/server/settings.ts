@@ -2,7 +2,7 @@ import fs from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
 
-export type FixoTheme = "night" | "day" | "galaxy";
+export type FixoTheme = "galaxy" | "emerald" | "ice";
 export type FixoLocale = "fa" | "en";
 
 export type FixoSettings = {
@@ -19,7 +19,7 @@ const DEFAULTS: FixoSettings = {
   shopWifiPassword: "",
   openaiModel: "gpt-4.1",
   autoShopWifi: false,
-  theme: "night",
+  theme: "galaxy",
   locale: "fa",
 };
 
@@ -27,9 +27,12 @@ function settingsPath() {
   return path.join(os.homedir(), ".config", "fixo", "settings.json");
 }
 
-function normalizeTheme(value: unknown): FixoTheme {
-  if (value === "day" || value === "galaxy") return value;
-  return "night";
+/** Migrate legacy night/day → emerald/ice; default galaxy. */
+export function normalizeTheme(value: unknown): FixoTheme {
+  if (value === "emerald" || value === "ice" || value === "galaxy") return value;
+  if (value === "night") return "emerald";
+  if (value === "day") return "ice";
+  return "galaxy";
 }
 
 function normalizeLocale(value: unknown): FixoLocale {
@@ -40,7 +43,7 @@ export async function loadSettings(): Promise<FixoSettings> {
   const file = settingsPath();
   try {
     const raw = await fs.readFile(file, "utf8");
-    const parsed = JSON.parse(raw) as Partial<FixoSettings>;
+    const parsed = JSON.parse(raw) as Partial<FixoSettings> & { theme?: unknown };
     return {
       ...DEFAULTS,
       ...parsed,
@@ -90,7 +93,7 @@ export function publicSettings(settings: FixoSettings) {
     hasShopWifiPassword: Boolean(settings.shopWifiPassword),
     openaiModel: settings.openaiModel,
     autoShopWifi: settings.autoShopWifi === true,
-    theme: settings.theme ?? "night",
+    theme: settings.theme ?? "galaxy",
     locale: settings.locale ?? "fa",
   };
 }
