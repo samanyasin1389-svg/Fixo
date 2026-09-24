@@ -76,7 +76,7 @@ app.put("/api/settings", async (req, res) => {
       ...(typeof shopWifiPassword === "string" ? { shopWifiPassword } : {}),
       ...(typeof openaiModel === "string" ? { openaiModel } : {}),
       ...(typeof autoShopWifi === "boolean" ? { autoShopWifi } : {}),
-      ...(theme === "day" || theme === "night" || theme === "galaxy" ? { theme } : {}),
+      ...(theme === "galaxy" || theme === "emerald" || theme === "ice" ? { theme } : {}),
       ...(locale === "fa" || locale === "en" ? { locale } : {}),
     });
     res.json({ ok: true, settings: publicSettings(saved) });

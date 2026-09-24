@@ -37,35 +37,36 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
     vec2 uv = fragCoord / iResolution.xy;
     float time = iTime * u_speed;
 
-    float verticalGradient = 1.0 - abs(uv.y - 0.5) * 2.0;
-    verticalGradient = pow(verticalGradient, u_stretch);
+    float verticalGradient = 1.0 - abs(uv.y - 0.42) * 1.85;
+    verticalGradient = pow(max(verticalGradient, 0.0), u_stretch);
 
-    vec2 flowUV = vec2(uv.x + time * 0.1, uv.y);
+    vec2 flowUV = vec2(uv.x + time * 0.08, uv.y * 0.95);
 
-    float aurora1 = fractalNoise(flowUV * u_frequency * 3.0 + vec2(time * 0.2, 0.0));
-    float aurora2 = fractalNoise(flowUV * u_frequency * 2.0 + vec2(time * 0.15, 1000.0));
-    float aurora3 = fractalNoise(flowUV * u_frequency * 4.0 + vec2(time * 0.25, 2000.0));
+    float aurora1 = fractalNoise(flowUV * u_frequency * 3.0 + vec2(time * 0.18, 0.0));
+    float aurora2 = fractalNoise(flowUV * u_frequency * 2.1 + vec2(time * 0.12, 1000.0));
+    float aurora3 = fractalNoise(flowUV * u_frequency * 3.8 + vec2(time * 0.22, 2000.0));
 
-    float wave1 = sin(uv.x * 8.0 + time * 2.0) * 0.1;
-    float wave2 = sin(uv.x * 12.0 + time * 1.5) * 0.05;
+    float wave1 = sin(uv.x * 7.0 + time * 1.7) * 0.09;
+    float wave2 = sin(uv.x * 11.0 + time * 1.2) * 0.045;
 
     float distortedY = uv.y + wave1 + wave2;
 
-    aurora1 *= smoothstep(0.3, 0.7, distortedY) * smoothstep(0.8, 0.6, distortedY);
-    aurora2 *= smoothstep(0.4, 0.6, distortedY) * smoothstep(0.7, 0.5, distortedY);
-    aurora3 *= smoothstep(0.35, 0.65, distortedY) * smoothstep(0.75, 0.55, distortedY);
+    aurora1 *= smoothstep(0.22, 0.62, distortedY) * smoothstep(0.92, 0.55, distortedY);
+    aurora2 *= smoothstep(0.3, 0.55, distortedY) * smoothstep(0.85, 0.48, distortedY);
+    aurora3 *= smoothstep(0.28, 0.58, distortedY) * smoothstep(0.88, 0.5, distortedY);
 
-    float combinedAurora = (aurora1 * 0.6 + aurora2 * 0.8 + aurora3 * 0.4) * verticalGradient;
+    float combinedAurora = (aurora1 * 0.55 + aurora2 * 0.85 + aurora3 * 0.45) * verticalGradient;
     combinedAurora *= u_intensity;
 
-    vec3 color1 = vec3(0.35, 0.12, 0.85);
-    vec3 color2 = vec3(0.15, 0.35, 1.0);
-    vec3 color3 = vec3(0.75, 0.2, 0.95);
-    vec3 color4 = vec3(0.1, 0.85, 0.95);
+    // Electric violet / blue — matches Fixo Galaxy reference
+    vec3 color1 = vec3(0.48, 0.36, 1.0);
+    vec3 color2 = vec3(0.31, 0.55, 1.0);
+    vec3 color3 = vec3(0.78, 0.49, 1.0);
+    vec3 color4 = vec3(1.0, 0.42, 0.62);
 
-    float colorMix1 = smoothstep(0.2, 0.4, uv.y);
-    float colorMix2 = smoothstep(0.4, 0.6, uv.y);
-    float colorMix3 = smoothstep(0.6, 0.8, uv.y);
+    float colorMix1 = smoothstep(0.15, 0.4, uv.y);
+    float colorMix2 = smoothstep(0.38, 0.58, uv.y);
+    float colorMix3 = smoothstep(0.55, 0.82, uv.y);
 
     vec3 finalColor = mix(color1, color2, colorMix1);
     finalColor = mix(finalColor, color3, colorMix2);
@@ -76,12 +77,12 @@ void mainImage( out vec4 fragColor, in vec2 fragCoord )
 
     finalColor *= combinedAurora;
 
-    float horizonGlow = exp(-abs(uv.y - 0.5) * 8.0) * 0.12;
+    float horizonGlow = exp(-abs(uv.y - 0.45) * 7.0) * 0.14;
     finalColor += finalColor * horizonGlow;
 
-    // Deep space base so UI stays readable
-    vec3 space = vec3(0.04, 0.02, 0.09);
-    finalColor = space + finalColor * 0.85;
+    // Cosmic base #0B0B1A
+    vec3 space = vec3(0.043, 0.043, 0.102);
+    finalColor = space + finalColor * 0.9;
 
     finalColor = clamp(finalColor, 0.0, 1.0);
     fragColor = vec4(finalColor, 1.0);
@@ -97,11 +98,11 @@ type Props = {
 };
 
 export function AuroraBackground({
-  speed = 0.55,
-  intensity = 1.15,
-  vibrancy = 1.2,
-  frequency = 0.9,
-  stretch = 1.1,
+  speed = 0.5,
+  intensity = 1.2,
+  vibrancy = 1.25,
+  frequency = 0.85,
+  stretch = 1.05,
 }: Props) {
   return (
     <div className="aurora-bg" aria-hidden="true">

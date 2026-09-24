@@ -1,14 +1,24 @@
 export type Locale = "fa" | "en";
-export type Theme = "night" | "day" | "galaxy";
+export type Theme = "galaxy" | "emerald" | "ice";
+export type AppTab = "home" | "agent" | "bench" | "settings";
 
 export type MessageKey =
   | "tagline"
   | "connected"
   | "disconnected"
-  | "themeNight"
-  | "themeDay"
   | "themeGalaxy"
+  | "themeEmerald"
+  | "themeIce"
   | "themePicker"
+  | "navHome"
+  | "navAgent"
+  | "navBench"
+  | "navSettings"
+  | "homeWelcome"
+  | "homeHint"
+  | "homeGoAgent"
+  | "homeGoBench"
+  | "homeGoSettings"
   | "langFa"
   | "langEn"
   | "networkShop"
@@ -76,16 +86,27 @@ export type MessageKey =
   | "vpnStatus"
   | "vpnDelete"
   | "vpnDeleted"
-  | "vpnDeleteConfirm";
+  | "vpnDeleteConfirm"
+  | "settingsTheme"
+  | "settingsLanguage";
 
 const fa: Record<MessageKey, string> = {
   tagline: "میزکار تعمیرات؛ شبکه، نصب، بک‌آپ.",
   connected: "وصل",
   disconnected: "قطع",
-  themeNight: "شب",
-  themeDay: "روز",
   themeGalaxy: "کهکشان",
-  themePicker: "انتخاب تم",
+  themeEmerald: "زمردی",
+  themeIce: "یخی",
+  themePicker: "تم",
+  navHome: "خانه",
+  navAgent: "ایجنت",
+  navBench: "میزکار",
+  navSettings: "تنظیمات",
+  homeWelcome: "میز کار Fixo آماده است.",
+  homeHint: "از پایین برو سراغ ایجنت، ابزارها، یا تنظیمات.",
+  homeGoAgent: "گفتگو با ایجنت",
+  homeGoBench: "میزکار و ابزارها",
+  homeGoSettings: "تم و تنظیمات",
   langFa: "فا",
   langEn: "EN",
   networkShop: "شبکه مغازه",
@@ -111,7 +132,7 @@ const fa: Record<MessageKey, string> = {
   startBackup: "شروع بک‌آپ",
   pause: "توقف موقت",
   resume: "ادامه",
-  settingsWifi: "تنظیمات رمز وای‌فای",
+  settingsWifi: "رمز وای‌فای مغازه",
   closeSettings: "بستن تنظیمات",
   ssid: "SSID",
   passwordNew: "رمز جدید (اختیاری)",
@@ -154,16 +175,27 @@ const fa: Record<MessageKey, string> = {
   vpnDelete: "حذف اکانت",
   vpnDeleted: "اکانت پاک شد",
   vpnDeleteConfirm: "اکانت این شماره پاک شود؟",
+  settingsTheme: "تم ظاهر",
+  settingsLanguage: "زبان",
 };
 
 const en: Record<MessageKey, string> = {
   tagline: "Repair bench — network, install, backup.",
   connected: "Connected",
   disconnected: "Disconnected",
-  themeNight: "Night",
-  themeDay: "Day",
   themeGalaxy: "Galaxy",
+  themeEmerald: "Emerald",
+  themeIce: "Ice",
   themePicker: "Theme",
+  navHome: "Home",
+  navAgent: "Agent",
+  navBench: "Bench",
+  navSettings: "Settings",
+  homeWelcome: "Fixo desk is ready.",
+  homeHint: "Use the bottom bar for Agent, tools, or settings.",
+  homeGoAgent: "Talk to Agent",
+  homeGoBench: "Bench & tools",
+  homeGoSettings: "Theme & settings",
   langFa: "FA",
   langEn: "EN",
   networkShop: "Shop network",
@@ -189,7 +221,7 @@ const en: Record<MessageKey, string> = {
   startBackup: "Start backup",
   pause: "Pause",
   resume: "Resume",
-  settingsWifi: "Wi‑Fi password settings",
+  settingsWifi: "Shop Wi‑Fi password",
   closeSettings: "Close settings",
   ssid: "SSID",
   passwordNew: "New password (optional)",
@@ -232,6 +264,8 @@ const en: Record<MessageKey, string> = {
   vpnDelete: "Delete account",
   vpnDeleted: "Account deleted",
   vpnDeleteConfirm: "Delete this account?",
+  settingsTheme: "Appearance",
+  settingsLanguage: "Language",
 };
 
 const tables: Record<Locale, Record<MessageKey, string>> = { fa, en };
@@ -259,10 +293,11 @@ export function sourceLabel(locale: Locale, id: string): string {
   }
 }
 
-/** Manual-only sources (no Play, no auto cascade) */
 export const MANUAL_SOURCE_IDS = [
   "model_search",
   "local_apk",
   "github",
   "url",
 ] as const;
+
+export const TAB_ORDER: AppTab[] = ["home", "agent", "bench", "settings"];
