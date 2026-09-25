@@ -284,9 +284,8 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
 
   server.tool(
     "provision_vpn",
-    "Create or renew a Pasargad VPN account and push the subscription into V2Box on the phone. username, days, and gigabytes are required.",
+    "Create a Pasargad VPN account and push the subscription into V2Box on the phone. Only days and gigabytes are required; username is auto-assigned as sequential numbers (1, 2, 3, …).",
     {
-      username: z.string(),
       days: z.number().positive(),
       gigabytes: z.number().positive(),
       deviceSerial: z.string().optional(),
@@ -312,7 +311,6 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
           );
         }
         const account = await client.provision({
-          username: args.username,
           days: args.days,
           gigabytes: args.gigabytes,
         });
@@ -346,7 +344,7 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
 
   server.tool(
     "delete_vpn",
-    "Permanently delete a Pasargad VPN account by username (usually phone number).",
+    "Permanently delete a Pasargad VPN account by numeric username.",
     { username: z.string() },
     async ({ username }) => {
       try {

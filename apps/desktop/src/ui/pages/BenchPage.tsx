@@ -64,8 +64,9 @@ export type BenchPageProps = {
   manualTargets: CatalogApp[];
   manualSourceOptions: { id: ManualSource; label: string }[];
   vpnOpen: boolean;
-  vpnForm: { username: string; days: string; gigabytes: string };
+  vpnForm: { days: string; gigabytes: string };
   vpnResult: {
+    username?: string;
     status?: string;
     action?: string;
     subscriptionUrl?: string;
@@ -322,12 +323,6 @@ export function BenchPage(props: BenchPageProps) {
             </div>
             <input
               className="field"
-              placeholder={t(locale, "vpnUsername")}
-              value={vpnForm.username}
-              onChange={(e) => props.onVpnForm({ username: e.target.value })}
-            />
-            <input
-              className="field"
               type="number"
               min={1}
               placeholder={t(locale, "vpnDays")}
@@ -346,7 +341,6 @@ export function BenchPage(props: BenchPageProps) {
               type="button"
               disabled={
                 busy ||
-                !vpnForm.username.trim() ||
                 !vpnForm.days.trim() ||
                 !vpnForm.gigabytes.trim()
               }
@@ -356,6 +350,11 @@ export function BenchPage(props: BenchPageProps) {
             </button>
             {vpnResult ? (
               <div className="vpn-result">
+                {vpnResult.username ? (
+                  <p className="muted">
+                    {t(locale, "vpnAssignedUser")}: {vpnResult.username}
+                  </p>
+                ) : null}
                 <p className="muted">
                   {t(locale, "vpnStatus")}: {vpnResult.status ?? "—"}
                   {vpnResult.action ? ` (${vpnResult.action})` : ""}
@@ -377,7 +376,7 @@ export function BenchPage(props: BenchPageProps) {
                       <button
                         type="button"
                         className="secondary"
-                        disabled={busy || !vpnForm.username.trim()}
+                        disabled={busy || !vpnResult.username}
                         onClick={() => props.onDeleteVpn()}
                       >
                         {t(locale, "vpnDelete")}
@@ -388,7 +387,7 @@ export function BenchPage(props: BenchPageProps) {
                   <button
                     type="button"
                     className="secondary"
-                    disabled={busy || !vpnForm.username.trim()}
+                    disabled={busy || !vpnResult.username}
                     onClick={() => props.onDeleteVpn()}
                   >
                     {t(locale, "vpnDelete")}

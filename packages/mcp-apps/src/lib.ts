@@ -38,6 +38,7 @@ export {
 export {
   createPasargadClient,
   normalizePasargadApiKey,
+  nextNumericUsernameFrom,
   PasargadError,
   type PasargadClient,
   type PasargadClientOptions,

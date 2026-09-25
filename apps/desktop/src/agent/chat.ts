@@ -525,15 +525,14 @@ export async function handleChat(input: {
     }),
     provision_vpn: tool({
       description:
-        "Create or renew a Pasargad/PasarGuard VPN account and push the subscription config into V2Box on the phone. Use when technician asks for وی‌پی‌ان / پاسارگاد / VPN. username, days, and gigabytes are all required — ask if missing. Suggest chips are only UI helpers; do not invent values.",
+        "Create a Pasargad/PasarGuard VPN account and push the subscription config into V2Box on the phone. Use when technician asks for وی‌پی‌ان / پاسارگاد / VPN / فیلترشکن. Only days and gigabytes are required — ask if missing. Username is assigned automatically as sequential numbers (1, 2, 3, …). Do not ask for or invent a username.",
       parameters: z.object({
-        username: z.string().describe("Usually the phone number"),
         days: z.number().positive().describe("Account duration in days"),
         gigabytes: z.number().positive().describe("Data limit in GB"),
         deviceSerial: z.string().optional(),
         pushToDevice: z.boolean().default(true),
       }),
-      execute: async ({ username, days, gigabytes, deviceSerial, pushToDevice }) => {
+      execute: async ({ days, gigabytes, deviceSerial, pushToDevice }) => {
         try {
           const client = createPasargadClient();
           if (!client.hasCredentials) {
@@ -543,7 +542,7 @@ export async function handleChat(input: {
                 "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
             });
           }
-          const account = await client.provision({ username, days, gigabytes });
+          const account = await client.provision({ days, gigabytes });
           let push = null;
           if (pushToDevice !== false) {
             const { serial, evidence } = await resolveSerial(
@@ -585,9 +584,9 @@ export async function handleChat(input: {
     }),
     delete_vpn: tool({
       description:
-        "Permanently delete a Pasargad/PasarGuard VPN account by username (usually phone number). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
+        "Permanently delete a Pasargad/PasarGuard VPN account by username (numeric id like 1, 2, 3). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
       parameters: z.object({
-        username: z.string().describe("Username or phone number to delete"),
+        username: z.string().describe("Numeric username to delete (e.g. 12)"),
       }),
       execute: async ({ username }) => {
         try {
@@ -659,8 +658,8 @@ export async function handleChat(input: {
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
-اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس: از provision_vpn با username + days + gigabytes استفاده کن. اگر هر کدام نبود بپرس؛ مقدار از خودت نساز.
-اگر گفت اکانت وی‌پی‌ان / پاسارگاد فلان شماره را پاک کن یا حذف کن: delete_vpn را با همان username بزن.
+اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس / فیلترشکن: از provision_vpn با days + gigabytes استفاده کن. نام‌کاربری را سیستم خودش عددی می‌سازد — نپرس و از خودت نساز. اگر days یا gigabytes نبود بپرس.
+اگر گفت اکانت وی‌پی‌ان / پاسارگاد فلان نام‌کاربری (عدد) را پاک کن یا حذف کن: delete_vpn را با همان username بزن.
 اگر گفت یادداشت/فایل/یادآوری بساز یا بنویس: create_shop_note را با title و content بزن (روی Desktop/Fixo-Notes ذخیره می‌شود).
 جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس.`;
 

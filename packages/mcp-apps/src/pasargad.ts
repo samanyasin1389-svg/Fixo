@@ -82,6 +82,26 @@ function absoluteUrl(baseUrl: string, pathOrUrl: string): string {
   return `${base}${path}`;
 }
 
+/** Next sequential numeric username from existing names (1, 2, 3, …). */
+export function nextNumericUsernameFrom(usernames: Iterable<string>): string {
+  let max = 0;
+  for (const name of usernames) {
+    const u = String(name ?? "").trim();
+    // Shop seq ids only — ignore phone numbers / long digit strings
+    if (!/^\d{1,6}$/.test(u)) continue;
+    const n = Number(u);
+    if (Number.isSafeInteger(n) && n > max) max = n;
+  }
+  return String(max + 1);
+}
+
+function isUsernameConflict(err: unknown): boolean {
+  if (!(err instanceof PasargadError)) return false;
+  if (err.statusCode === 409 || err.statusCode === 400) return true;
+  const hay = `${err.message} ${typeof err.detail === "string" ? err.detail : JSON.stringify(err.detail ?? "")}`;
+  return /exist|already|duplicate|تکرار|موجود/i.test(hay);
+}
+
 export function createPasargadClient(options: PasargadClientOptions = {}) {
   const baseUrl = (
     options.baseUrl ??
@@ -197,6 +217,32 @@ export function createPasargadClient(options: PasargadClientOptions = {}) {
     }
   }
 
+  async function listUsernames(): Promise<string[]> {
+    const names: string[] = [];
+    let offset = 0;
+    const limit = 100;
+    for (let page = 0; page < 100; page++) {
+      const { data } = await request<{
+        users?: Array<{ username?: string }>;
+        total?: number;
+      }>("GET", `/api/users?offset=${offset}&limit=${limit}`);
+      const users = Array.isArray(data?.users) ? data.users : [];
+      for (const u of users) {
+        if (u?.username) names.push(String(u.username));
+      }
+      offset += limit;
+      const total = typeof data?.total === "number" ? data.total : undefined;
+      if (users.length < limit) break;
+      if (total !== undefined && offset >= total) break;
+    }
+    return names;
+  }
+
+  async function allocateNumericUsername(): Promise<string> {
+    const names = await listUsernames();
+    return nextNumericUsernameFrom(names);
+  }
+
   async function deleteUser(username: string): Promise<void> {
     const u = username.trim();
     await request("DELETE", `/api/user/${encodeURIComponent(u)}`);
@@ -249,32 +295,63 @@ export function createPasargadClient(options: PasargadClientOptions = {}) {
     return s === "disabled";
   }
 
+  async function createWithNumericUsername(input: {
+    days: number;
+    gigabytes: number;
+  }): Promise<{ user: PasargadUser; username: string }> {
+    let username = await allocateNumericUsername();
+    for (let attempt = 0; attempt < 30; attempt++) {
+      try {
+        const user = await createUser({
+          username,
+          days: input.days,
+          gigabytes: input.gigabytes,
+        });
+        return { user, username: user.username || username };
+      } catch (err) {
+        if (!isUsernameConflict(err)) throw err;
+        username = String(Number(username) + 1);
+      }
+    }
+    throw new PasargadError("نتوانستیم نام‌کاربری عددی آزاد پیدا کنیم");
+  }
+
   async function provision(input: {
-    username: string;
+    /** Ignored when omitted — system assigns next numeric username (1, 2, 3, …). */
+    username?: string;
     days: number;
     gigabytes: number;
   }): Promise<ProvisionResult> {
-    const username = input.username.trim();
+    const requested = (input.username ?? "").trim();
     const days = Number(input.days);
     const gigabytes = Number(input.gigabytes);
-    if (!username || !Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
-      throw new PasargadError("username، مدت (روز) و حجم (گیگ) همگی لازمند");
+    if (!Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
+      throw new PasargadError("مدت (روز) و حجم (گیگ) لازمند");
     }
 
-    const existing = await lookupUser(username);
     let action: ProvisionAction;
     let user: PasargadUser;
+    let username: string;
 
-    if (!existing) {
-      user = await createUser({ username, days, gigabytes });
+    if (!requested) {
+      const created = await createWithNumericUsername({ days, gigabytes });
+      user = created.user;
+      username = created.username;
       action = "created";
-    } else if (needsRecreation(existing)) {
-      await deleteUser(existing.username);
-      user = await createUser({ username, days, gigabytes });
-      action = "recreated";
     } else {
-      user = existing;
-      action = "reused";
+      username = requested;
+      const existing = await lookupUser(username);
+      if (!existing) {
+        user = await createUser({ username, days, gigabytes });
+        action = "created";
+      } else if (needsRecreation(existing)) {
+        await deleteUser(existing.username);
+        user = await createUser({ username, days, gigabytes });
+        action = "recreated";
+      } else {
+        user = existing;
+        action = "reused";
+      }
     }
 
     const subscriptionUrl = subscriptionUrlFor(user);
@@ -303,6 +380,8 @@ export function createPasargadClient(options: PasargadClientOptions = {}) {
     baseUrl,
     hasCredentials: Boolean(apiKey || (adminUser && adminPass)),
     lookupUser,
+    listUsernames,
+    allocateNumericUsername,
     createUser,
     deleteUser,
     provision,
