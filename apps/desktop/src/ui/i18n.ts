@@ -72,7 +72,7 @@ export type MessageKey =
   | "runManual"
   | "installing"
   | "vpnSection"
-  | "vpnUsername"
+  | "vpnAssignedUser"
   | "vpnDays"
   | "vpnGigabytes"
   | "vpnSuggest30"
@@ -80,6 +80,7 @@ export type MessageKey =
   | "vpnSuggest100"
   | "vpnProvision"
   | "vpnNeedFields"
+  | "vpnNeedDeleteUser"
   | "vpnLinkCopied"
   | "vpnCopyLink"
   | "vpnBusy"
@@ -166,21 +167,22 @@ const fa: Record<MessageKey, string> = {
   runManual: "اجرا",
   installing: "در حال نصب…",
   vpnSection: "VPN پاسارگاد",
-  vpnUsername: "نام‌کاربری / شماره",
+  vpnAssignedUser: "نام‌کاربری",
   vpnDays: "مدت (روز)",
   vpnGigabytes: "حجم (گیگ)",
   vpnSuggest30: "یک ماه / ۳۰ گیگ",
   vpnSuggest50: "یک ماه / ۵۰ گیگ",
   vpnSuggest100: "سه ماه / ۱۰۰ گیگ",
   vpnProvision: "ساخت / تمدید + نصب روی گوشی",
-  vpnNeedFields: "username، مدت و حجم را پر کن",
+  vpnNeedFields: "مدت و حجم را پر کن",
+  vpnNeedDeleteUser: "اول اکانت بساز، بعد حذف کن",
   vpnLinkCopied: "لینک کپی شد",
   vpnCopyLink: "کپی لینک",
   vpnBusy: "در حال ساخت…",
   vpnStatus: "وضعیت",
   vpnDelete: "حذف اکانت",
   vpnDeleted: "اکانت پاک شد",
-  vpnDeleteConfirm: "اکانت این شماره پاک شود؟",
+  vpnDeleteConfirm: "این اکانت پاک شود؟",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
   voiceTalk: "صحبت با ایجنت",
@@ -261,14 +263,15 @@ const en: Record<MessageKey, string> = {
   runManual: "Run",
   installing: "Installing…",
   vpnSection: "Pasargad VPN",
-  vpnUsername: "Username / phone",
+  vpnAssignedUser: "Username",
   vpnDays: "Days",
   vpnGigabytes: "Gigabytes",
   vpnSuggest30: "1 month / 30 GB",
   vpnSuggest50: "1 month / 50 GB",
   vpnSuggest100: "3 months / 100 GB",
   vpnProvision: "Create / renew + push to phone",
-  vpnNeedFields: "Fill username, days, and gigabytes",
+  vpnNeedFields: "Fill days and gigabytes",
+  vpnNeedDeleteUser: "Create an account first, then delete",
   vpnLinkCopied: "Link copied",
   vpnCopyLink: "Copy link",
   vpnBusy: "Provisioning…",

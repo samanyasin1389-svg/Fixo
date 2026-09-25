@@ -95,8 +95,9 @@ export function App() {
   const [manualTargets, setManualTargets] = useState<CatalogApp[]>([]);
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
   const [vpnOpen, setVpnOpen] = useState(false);
-  const [vpnForm, setVpnForm] = useState({ username: "", days: "", gigabytes: "" });
+  const [vpnForm, setVpnForm] = useState({ days: "", gigabytes: "" });
   const [vpnResult, setVpnResult] = useState<{
+    username?: string;
     status?: string;
     action?: string;
     subscriptionUrl?: string;
@@ -503,10 +504,9 @@ export function App() {
   }
 
   async function provisionVpn() {
-    const username = vpnForm.username.trim();
     const days = Number(vpnForm.days);
     const gigabytes = Number(vpnForm.gigabytes);
-    if (!username || !Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
+    if (!Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
       pushToast(t(locale, "vpnNeedFields"), "error");
       return;
     }
@@ -519,7 +519,6 @@ export function App() {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          username,
           days,
           gigabytes,
           deviceSerial: selectedSerial || undefined,
@@ -534,6 +533,7 @@ export function App() {
         return;
       }
       setVpnResult({
+        username: data.account?.username,
         status: data.account?.status,
         action: data.account?.action,
         subscriptionUrl: data.account?.subscriptionUrl,
@@ -561,9 +561,9 @@ export function App() {
   }
 
   async function deleteVpnAccount() {
-    const target = vpnForm.username.trim();
+    const target = (vpnResult?.username ?? "").trim();
     if (!target) {
-      pushToast(t(locale, "vpnNeedFields"), "error");
+      pushToast(t(locale, "vpnNeedDeleteUser"), "error");
       return;
     }
     if (!window.confirm(t(locale, "vpnDeleteConfirm"))) return;

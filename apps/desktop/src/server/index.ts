@@ -529,13 +529,12 @@ app.post("/api/backup/:jobId/:action", async (req, res) => {
 
 app.post("/api/vpn/provision", async (req, res) => {
   try {
-    const username = String(req.body?.username ?? "").trim();
     const days = Number(req.body?.days);
     const gigabytes = Number(req.body?.gigabytes);
-    if (!username || !Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
+    if (!Number.isFinite(days) || days <= 0 || !Number.isFinite(gigabytes) || gigabytes <= 0) {
       res.status(400).json({
         ok: false,
-        message: "username، days و gigabytes همگی لازمند",
+        message: "days و gigabytes لازمند",
       });
       return;
     }
@@ -551,7 +550,8 @@ app.post("/api/vpn/provision", async (req, res) => {
       return;
     }
 
-    const account = await client.provision({ username, days, gigabytes });
+    // Username is auto-assigned as sequential numbers (1, 2, 3, …)
+    const account = await client.provision({ days, gigabytes });
 
     let push: {
       ok: boolean;
