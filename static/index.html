@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Fixo — چت‌بات محلی</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Vazirmatn:wght@400;500;600;700&family=Syne:wght@700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/static/styles.css" />
+  </head>
+  <body>
+    <div class="atmosphere" aria-hidden="true"></div>
+
+    <header class="topbar">
+      <div class="brand">
+        <span class="brand-mark" aria-hidden="true"></span>
+        <span class="brand-name">Fixo</span>
+      </div>
+      <div class="status" id="status" data-state="checking">
+        <span class="status-dot"></span>
+        <span class="status-text">در حال بررسی مدل…</span>
+      </div>
+    </header>
+
+    <main class="shell">
+      <section class="hero" id="welcome">
+        <p class="brand-hero">Fixo</p>
+        <h1>چت‌بات روی سیستم خودت</h1>
+        <p class="lede">
+          مدل هوش مصنوعی روی همین ماشین اجرا می‌شود؛ بدون نیاز به اینترنت برای پاسخ.
+        </p>
+      </section>
+
+      <section class="chat" aria-label="گفتگو">
+        <div class="messages" id="messages" role="log" aria-live="polite"></div>
+
+        <form class="composer" id="composer">
+          <label class="sr-only" for="input">پیام</label>
+          <textarea
+            id="input"
+            rows="1"
+            placeholder="چی تو ذهنته؟ بنویس…"
+            autocomplete="off"
+            maxlength="4000"
+          ></textarea>
+          <button type="submit" id="send" disabled>ارسال</button>
+        </form>
+      </section>
+    </main>
+
+    <script src="/static/app.js" defer></script>
+  </body>
+</html>
