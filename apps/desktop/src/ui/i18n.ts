@@ -121,6 +121,8 @@ export type MessageKey =
   | "phoneSettingsEmpty"
   | "settingsTheme"
   | "settingsLanguage"
+  | "settingsVersion"
+  | "settingsVersionHint"
   | "voiceTalk"
   | "voiceListening"
   | "voiceHint"
@@ -249,6 +251,8 @@ const fa: Record<MessageKey, string> = {
   phoneSettingsEmpty: "موردی در این دسته نیست",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
+  settingsVersion: "نسخه",
+  settingsVersionHint: "با هر تغییر منتشرشده، نسخه بالا می‌رود.",
   voiceTalk: "صحبت با ایجنت",
   voiceListening: "دارم گوش می‌دم…",
   voiceHint: "میکروفون را بزن؛ نصب، بک‌آپ، وای‌فای و بقیه را با صدا بگو.",
@@ -378,6 +382,8 @@ const en: Record<MessageKey, string> = {
   phoneSettingsEmpty: "No items in this category",
   settingsTheme: "Appearance",
   settingsLanguage: "Language",
+  settingsVersion: "Version",
+  settingsVersionHint: "Bumped on every shipped change.",
   voiceTalk: "Talk to agent",
   voiceListening: "Listening…",
   voiceHint: "Tap the mic — say install, backup, Wi‑Fi, and more.",

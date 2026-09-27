@@ -1,5 +1,6 @@
 import type { AppTab, Locale } from "../i18n";
 import { t } from "../i18n";
+import { IconAgent, IconBench, IconSettings } from "../icons";
 
 type HomePageProps = {
   locale: Locale;
@@ -40,22 +41,22 @@ export function HomePage({
       </div>
       <div className="home-shortcuts">
         <button type="button" className="home-shortcut" onClick={() => onGo("agent")}>
-          <span>{t(locale, "homeGoAgent")}</span>
-          <span className="home-shortcut-arrow" aria-hidden="true">
-            ←
+          <span className="home-shortcut-icon" aria-hidden="true">
+            <IconAgent size={20} />
           </span>
+          <span>{t(locale, "homeGoAgent")}</span>
         </button>
         <button type="button" className="home-shortcut" onClick={() => onGo("bench")}>
-          <span>{t(locale, "homeGoBench")}</span>
-          <span className="home-shortcut-arrow" aria-hidden="true">
-            ←
+          <span className="home-shortcut-icon" aria-hidden="true">
+            <IconBench size={20} />
           </span>
+          <span>{t(locale, "homeGoBench")}</span>
         </button>
         <button type="button" className="home-shortcut" onClick={() => onGo("settings")}>
-          <span>{t(locale, "homeGoSettings")}</span>
-          <span className="home-shortcut-arrow" aria-hidden="true">
-            ←
+          <span className="home-shortcut-icon" aria-hidden="true">
+            <IconSettings size={20} />
           </span>
+          <span>{t(locale, "homeGoSettings")}</span>
         </button>
       </div>
     </section>
