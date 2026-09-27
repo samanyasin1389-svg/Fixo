@@ -19,6 +19,7 @@ import {
   setWifi,
 } from "@fixo/mcp-network";
 import {
+  assistGmailSignup,
   backupJobs,
   checkAppInstalled,
   createPasargadClient,
@@ -649,19 +650,53 @@ export async function handleChat(input: {
         });
       },
     }),
+    assist_gmail_signup: tool({
+      description:
+        "Help create a Gmail account on the connected phone: open Google signup, best-effort fill name/username, generate password, copy to clipboard, optional shop note. Use when technician asks جیمیل بساز / ساخت جیمیل / اکانت گوگل. CAPTCHA and SMS stay manual — never claim full automation or invent phone numbers.",
+      parameters: z.object({
+        firstName: z.string().optional().describe("Given name"),
+        lastName: z.string().optional().describe("Family name"),
+        username: z
+          .string()
+          .optional()
+          .describe("Desired gmail local-part without @gmail.com"),
+        password: z.string().optional().describe("Optional; generated if omitted"),
+        saveNote: z.boolean().optional(),
+        deviceSerial: z.string().optional(),
+      }),
+      execute: async ({ firstName, lastName, username, password, saveNote, deviceSerial }) => {
+        const { serial, evidence } = await resolveSerial(
+          input.adb,
+          deviceSerial ?? input.deviceSerial,
+        );
+        const result = await assistGmailSignup(input.adb, serial, {
+          firstName,
+          lastName,
+          username,
+          password,
+          saveNote,
+        });
+        return toolJson({
+          ...result,
+          deviceSerial: serial,
+          evidence: [...evidence, ...result.evidence],
+        });
+      },
+    }),
   };
 
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
 کاربر ممکن است با میکروفون/صدا دستور بدهد — همان دستورهای صوتی را مثل متن جدی بگیر و ابزار بزن.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, delete_vpn, create_shop_note.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, delete_vpn, create_shop_note, assist_gmail_signup.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس / فیلترشکن: از provision_vpn با days + gigabytes استفاده کن. نام‌کاربری را سیستم خودش عددی می‌سازد — نپرس و از خودت نساز. اگر days یا gigabytes نبود بپرس.
 اگر گفت اکانت وی‌پی‌ان / پاسارگاد فلان نام‌کاربری (عدد) را پاک کن یا حذف کن: delete_vpn را با همان username بزن.
 اگر گفت یادداشت/فایل/یادآوری بساز یا بنویس: create_shop_note را با title و content بزن (روی Desktop/Fixo-Notes ذخیره می‌شود).
-جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس.`;
+اگر گفت جیمیل بساز / ساخت جیمیل / اکانت گوگل: assist_gmail_signup را بزن. اگر نام یا نام‌خانوادگی نبود بپرس؛ username و password اختیاری‌اند (رمز را سیستم می‌سازد). بگو صفحه روی گوشی باز شد و کپچا/پیامک را تعمیرکار تمام کند — ادعا نکن جیمیل کامل ساخته شد.
+جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس. رمز جیمیل ساخته‌شده را فقط وقتی ابزار برگرداند، کوتاه بگو.`;
 
   let messages = input.messages.map((m) => ({
     role: m.role as "user" | "assistant" | "system",

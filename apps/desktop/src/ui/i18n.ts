@@ -88,6 +88,19 @@ export type MessageKey =
   | "vpnDelete"
   | "vpnDeleted"
   | "vpnDeleteConfirm"
+  | "gmailSection"
+  | "gmailHint"
+  | "gmailFirstName"
+  | "gmailLastName"
+  | "gmailUsername"
+  | "gmailPasswordOptional"
+  | "gmailAssist"
+  | "gmailEmail"
+  | "gmailPassword"
+  | "gmailCopyPassword"
+  | "gmailNoteSaved"
+  | "gmailBusy"
+  | "gmailNeedDevice"
   | "settingsTheme"
   | "settingsLanguage"
   | "voiceTalk"
@@ -183,6 +196,20 @@ const fa: Record<MessageKey, string> = {
   vpnDelete: "حذف اکانت",
   vpnDeleted: "اکانت پاک شد",
   vpnDeleteConfirm: "این اکانت پاک شود؟",
+  gmailSection: "ساخت جیمیل",
+  gmailHint:
+    "صفحه ساخت را روی گوشی باز می‌کند، نام را تا حد ممکن پر می‌کند، رمز می‌سازد. کپچا و پیامک با خودت.",
+  gmailFirstName: "نام",
+  gmailLastName: "نام خانوادگی",
+  gmailUsername: "نام‌کاربری پیشنهادی (اختیاری)",
+  gmailPasswordOptional: "رمز (خالی = ساخت خودکار)",
+  gmailAssist: "باز کردن ساخت جیمیل روی گوشی",
+  gmailEmail: "ایمیل",
+  gmailPassword: "رمز",
+  gmailCopyPassword: "کپی رمز",
+  gmailNoteSaved: "یادداشت",
+  gmailBusy: "در حال باز کردن صفحه ساخت جیمیل…",
+  gmailNeedDevice: "اول گوشی را وصل کن",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
   voiceTalk: "صحبت با ایجنت",
@@ -279,6 +306,20 @@ const en: Record<MessageKey, string> = {
   vpnDelete: "Delete account",
   vpnDeleted: "Account deleted",
   vpnDeleteConfirm: "Delete this account?",
+  gmailSection: "Create Gmail",
+  gmailHint:
+    "Opens signup on the phone, fills name when possible, generates a password. CAPTCHA and SMS stay manual.",
+  gmailFirstName: "First name",
+  gmailLastName: "Last name",
+  gmailUsername: "Suggested username (optional)",
+  gmailPasswordOptional: "Password (empty = auto)",
+  gmailAssist: "Open Gmail signup on phone",
+  gmailEmail: "Email",
+  gmailPassword: "Password",
+  gmailCopyPassword: "Copy password",
+  gmailNoteSaved: "Note",
+  gmailBusy: "Opening Gmail signup…",
+  gmailNeedDevice: "Connect a phone first",
   settingsTheme: "Appearance",
   settingsLanguage: "Language",
   voiceTalk: "Talk to agent",
