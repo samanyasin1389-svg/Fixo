@@ -1,5 +1,6 @@
 import { useEffect, useId, useRef, useState } from "react";
 import type { Theme } from "./i18n";
+import { IconPalette } from "./icons";
 
 type ThemeFanButtonProps = {
   theme: Theme;
@@ -72,7 +73,9 @@ export function ThemeFanButton({ theme, onChange, label, labels }: ThemeFanButto
         aria-expanded={open}
         aria-controls={menuId}
         onClick={toggle}
-      />
+      >
+        <IconPalette size={18} />
+      </button>
     </div>
   );
 }

@@ -28,6 +28,8 @@ export type PhoneDetectState = {
 type Props = {
   locale: Locale;
   open: boolean;
+  /** When true, render body only (no disclosure wrapper). */
+  alwaysOpen?: boolean;
   onOpen: (v: boolean) => void;
   categories: PhoneSettingCategory[];
   issues: PhoneSettingIssue[];
@@ -43,6 +45,7 @@ export function PhoneSettingsPanel(props: Props) {
   const {
     locale,
     open,
+    alwaysOpen,
     categories,
     issues,
     activeCategory,
@@ -52,6 +55,92 @@ export function PhoneSettingsPanel(props: Props) {
 
   const filtered = issues.filter((i) => i.categoryId === activeCategory);
   const isFa = locale === "fa";
+  const show = alwaysOpen || open;
+
+  const body = show ? (
+    <div className={alwaysOpen ? "phone-settings" : "vpn-body phone-settings"}>
+      {!alwaysOpen ? (
+        <p className="muted tiny">{t(locale, "phoneSettingsHint")}</p>
+      ) : (
+        <p className="muted tiny">{t(locale, "phoneSettingsHint")}</p>
+      )}
+      <div className="source-list phone-cat-list">
+        {categories.map((c) => {
+          const Icon = CATEGORY_ICONS[c.id] ?? IconSettings;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              className={
+                activeCategory === c.id
+                  ? "source-btn phone-cat-btn active"
+                  : "source-btn phone-cat-btn"
+              }
+              onClick={() => props.onCategory(c.id)}
+            >
+              <Icon size={18} />
+              <span>{isFa ? c.titleFa : c.titleEn}</span>
+            </button>
+          );
+        })}
+      </div>
+      <div className="phone-issue-list">
+        {filtered.map((issue) => {
+          const det = detectMap[issue.id];
+          return (
+            <div key={issue.id} className="phone-issue">
+              <p className="muted">
+                {isFa ? issue.titleFa : issue.titleEn}
+                {issue.kind !== "guide" ? (
+                  <span className="muted tiny"> · {issue.kind}</span>
+                ) : null}
+              </p>
+              {det ? (
+                <p
+                  className={
+                    det.status === "problem" ? "muted tiny danger" : "muted tiny"
+                  }
+                >
+                  {det.message}
+                </p>
+              ) : null}
+              <ul className="muted tiny">
+                {issue.stepsFa.slice(0, 4).map((s) => (
+                  <li key={s}>{s}</li>
+                ))}
+              </ul>
+              <div className="actions">
+                {issue.detectKey ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={busy}
+                    onClick={() => props.onDetect(issue.id)}
+                  >
+                    {t(locale, "phoneSettingsDetect")}
+                  </button>
+                ) : null}
+                {issue.fixKey ? (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => props.onFix(issue.id)}
+                  >
+                    {t(locale, "phoneSettingsFix")}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          );
+        })}
+        {filtered.length === 0 ? (
+          <p className="muted tiny">{t(locale, "phoneSettingsEmpty")}</p>
+        ) : null}
+      </div>
+    </div>
+  ) : null;
+
+  if (alwaysOpen) return body;
 
   return (
     <div className="section-gap">
@@ -64,88 +153,8 @@ export function PhoneSettingsPanel(props: Props) {
           <IconSettings size={18} />
           <span>{t(locale, "phoneSettingsSection")}</span>
         </span>
-        <span className="chevron">{open ? "▾" : "◂"}</span>
       </button>
-      {open ? (
-        <div className="vpn-body phone-settings">
-          <p className="muted tiny">{t(locale, "phoneSettingsHint")}</p>
-          <div className="source-list phone-cat-list">
-            {categories.map((c) => {
-              const Icon = CATEGORY_ICONS[c.id] ?? IconSettings;
-              return (
-                <button
-                  key={c.id}
-                  type="button"
-                  className={
-                    activeCategory === c.id
-                      ? "source-btn phone-cat-btn active"
-                      : "source-btn phone-cat-btn"
-                  }
-                  onClick={() => props.onCategory(c.id)}
-                >
-                  <Icon size={18} />
-                  <span>{isFa ? c.titleFa : c.titleEn}</span>
-                </button>
-              );
-            })}
-          </div>
-          <div className="phone-issue-list">
-            {filtered.map((issue) => {
-              const det = detectMap[issue.id];
-              return (
-                <div key={issue.id} className="phone-issue">
-                  <p className="muted">
-                    {isFa ? issue.titleFa : issue.titleEn}
-                    {issue.kind !== "guide" ? (
-                      <span className="muted tiny"> · {issue.kind}</span>
-                    ) : null}
-                  </p>
-                  {det ? (
-                    <p
-                      className={
-                        det.status === "problem"
-                          ? "muted tiny danger"
-                          : "muted tiny"
-                      }
-                    >
-                      {det.message}
-                    </p>
-                  ) : null}
-                  <ul className="muted tiny">
-                    {issue.stepsFa.slice(0, 4).map((s) => (
-                      <li key={s}>{s}</li>
-                    ))}
-                  </ul>
-                  <div className="actions">
-                    {issue.detectKey ? (
-                      <button
-                        type="button"
-                        className="secondary"
-                        disabled={busy}
-                        onClick={() => props.onDetect(issue.id)}
-                      >
-                        {t(locale, "phoneSettingsDetect")}
-                      </button>
-                    ) : null}
-                    {issue.fixKey ? (
-                      <button
-                        type="button"
-                        disabled={busy}
-                        onClick={() => props.onFix(issue.id)}
-                      >
-                        {t(locale, "phoneSettingsFix")}
-                      </button>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
-            {filtered.length === 0 ? (
-              <p className="muted tiny">{t(locale, "phoneSettingsEmpty")}</p>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
+      {body}
     </div>
   );
 }

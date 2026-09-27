@@ -119,6 +119,8 @@ export type MessageKey =
   | "phoneSettingsDetect"
   | "phoneSettingsFix"
   | "phoneSettingsEmpty"
+  | "backToBench"
+  | "benchTools"
   | "settingsTheme"
   | "settingsLanguage"
   | "settingsVersion"
@@ -249,6 +251,8 @@ const fa: Record<MessageKey, string> = {
   phoneSettingsDetect: "تشخیص",
   phoneSettingsFix: "رفع / باز کردن",
   phoneSettingsEmpty: "موردی در این دسته نیست",
+  backToBench: "بازگشت به میزکار",
+  benchTools: "ابزارها",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
   settingsVersion: "نسخه",
@@ -380,6 +384,8 @@ const en: Record<MessageKey, string> = {
   phoneSettingsDetect: "Detect",
   phoneSettingsFix: "Fix / open",
   phoneSettingsEmpty: "No items in this category",
+  backToBench: "Back to bench",
+  benchTools: "Tools",
   settingsTheme: "Appearance",
   settingsLanguage: "Language",
   settingsVersion: "Version",

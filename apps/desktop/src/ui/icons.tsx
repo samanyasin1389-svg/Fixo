@@ -248,6 +248,68 @@ export function IconDashboard(props: IconProps) {
   );
 }
 
+export function IconChevron({
+  size = 18,
+  className,
+  direction = "end",
+}: IconProps & { direction?: "end" | "down" | "start" }) {
+  const rot =
+    direction === "down" ? "90" : direction === "start" ? "180" : "0";
+  return (
+    <Svg size={size} className={className}>
+      <g transform={`rotate(${rot} 12 12)`}>
+        <path d="M9 5.5 15.5 12 9 18.5" {...stroke} />
+      </g>
+    </Svg>
+  );
+}
+
+export function IconPalette(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path
+        d="M12 4a8 8 0 1 0 0 16h1.6a2.4 2.4 0 0 0 0-4.8H12a3.2 3.2 0 1 1 0-6.4 3.2 3.2 0 0 1 3.1 2.4"
+        {...stroke}
+      />
+      <circle cx="8.2" cy="10.2" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="10.2" cy="7.4" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="14.2" cy="7.4" r="1.1" fill="currentColor" stroke="none" />
+      <circle cx="16.2" cy="10.2" r="1.1" fill="currentColor" stroke="none" />
+    </Svg>
+  );
+}
+
+export function IconShield(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path
+        d="M12 3.5 19 6.5v5.2c0 4.3-2.9 7.3-7 8.8-4.1-1.5-7-4.5-7-8.8V6.5L12 3.5Z"
+        {...stroke}
+      />
+    </Svg>
+  );
+}
+
+export function IconMail(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <rect x="3.5" y="6" width="17" height="12" rx="2" {...stroke} />
+      <path d="m4.5 7.5 7.5 5.5 7.5-5.5" {...stroke} />
+    </Svg>
+  );
+}
+
+export function IconWrench(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path
+        d="M14.5 5.2a3.8 3.8 0 0 0-4.8 4.8L4.5 15.2v4.3H8.8l5.2-5.2a3.8 3.8 0 0 0 4.8-4.8l-2.3 2.3-2.1-2.1 2.3-2.3Z"
+        {...stroke}
+      />
+    </Svg>
+  );
+}
+
 export const CATEGORY_ICONS: Record<string, (props: IconProps) => ReactElement> = {
   dashboard: IconDashboard,
   battery: IconBattery,

@@ -1253,6 +1253,15 @@ html[data-theme="galaxy"] .atmosphere {
   transition: transform 520ms cubic-bezier(0.22, 1.1, 0.36, 1);
   position: relative;
   z-index: 2;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  color: #fff !important;
+}
+
+.theme-fan-core svg {
+  display: block;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.35));
 }
 
 .theme-fan-core.spin {
@@ -1498,12 +1507,101 @@ html[dir="rtl"] .tab-panel.dir-prev {
   padding-top: 16px;
 }
 
+.settings-version-inline {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  display: grid;
+  gap: 4px;
+  justify-items: center;
+  text-align: center;
+}
+
 .settings-version {
   margin: 0;
   font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
   font-size: 1.15rem;
   letter-spacing: 0.04em;
   color: var(--accent-bright);
+}
+
+.disclosure.static {
+  width: 100%;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  color: var(--ink);
+  background: var(--btn-secondary-bg);
+  border: 1px solid var(--line);
+  border-bottom: 3px solid color-mix(in srgb, var(--ink) 20%, transparent);
+  border-radius: 14px;
+  padding: 12px 14px;
+  font-weight: 600;
+}
+
+.bench-tool-list {
+  display: grid;
+  gap: 8px;
+}
+
+.bench-tool-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--line);
+  background: var(--btn-secondary-bg);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  transition:
+    border-color 160ms ease,
+    background 160ms ease,
+    transform 160ms ease;
+}
+
+.bench-tool-link:hover {
+  border-color: color-mix(in srgb, var(--accent) 50%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, var(--btn-secondary-bg));
+  transform: translateY(-1px);
+}
+
+.bench-tool-icon {
+  display: inline-flex;
+  color: var(--accent-bright);
+}
+
+.bench-tool-chevron {
+  margin-inline-start: auto;
+  display: inline-flex;
+  color: var(--muted);
+}
+
+.subpage-header {
+  display: grid;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+
+.subpage-back {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  width: fit-content;
+  color: var(--accent-bright);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.subpage-back:hover {
+  text-decoration: underline;
+}
+
+.subpage-body {
+  display: grid;
+  gap: 12px;
 }
 
 .settings-stack .settings-box,

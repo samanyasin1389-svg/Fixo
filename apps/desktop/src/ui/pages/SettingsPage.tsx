@@ -100,15 +100,14 @@ export function SettingsPage({
             {t(locale, "save")}
           </button>
           {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
+          <div className="settings-version-inline">
+            <p className="settings-label">{t(locale, "settingsVersion")}</p>
+            <p className="settings-version" title="Fixo app version">
+              {APP_VERSION_LABEL}
+            </p>
+            <p className="muted tiny">{t(locale, "settingsVersionHint")}</p>
+          </div>
         </div>
-      </div>
-
-      <div className="settings-block settings-version-block">
-        <p className="settings-label">{t(locale, "settingsVersion")}</p>
-        <p className="settings-version" title="Fixo app version">
-          {APP_VERSION_LABEL}
-        </p>
-        <p className="muted tiny">{t(locale, "settingsVersionHint")}</p>
       </div>
     </section>
   );
