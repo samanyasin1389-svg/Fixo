@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
+import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import {
   MANUAL_SOURCE_IDS,
   TAB_ORDER,
@@ -16,6 +17,10 @@ import { HomePage } from "./pages/HomePage";
 import { AgentPage } from "./pages/AgentPage";
 import { BenchPage } from "./pages/BenchPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { VpnPage } from "./pages/VpnPage";
+import { GmailPage } from "./pages/GmailPage";
+import { ManualInstallPage } from "./pages/ManualInstallPage";
+import { PhoneSettingsPage } from "./pages/PhoneSettingsPage";
 
 type Role = "user" | "assistant";
 type Msg = { role: Role; content: string };
@@ -62,9 +67,10 @@ function applyDocumentChrome(theme: Theme, locale: Locale) {
 }
 
 export function App() {
+  const navigate = useNavigate();
+  const location = useLocation();
   const [theme, setTheme] = useState<Theme>("galaxy");
   const [locale, setLocale] = useState<Locale>("fa");
-  const [activeTab, setActiveTab] = useState<AppTab>("home");
   const [slideDir, setSlideDir] = useState<"next" | "prev">("next");
   const [devices, setDevices] = useState<Device[]>([]);
   const [deviceSerial, setDeviceSerial] = useState("");
@@ -78,10 +84,7 @@ export function App() {
   const [shopSsid, setShopSsid] = useState("nibero");
   const [shopPassword, setShopPassword] = useState("");
   const [settingsMsg, setSettingsMsg] = useState<string | null>(null);
-  const { toasts, pushToast, dismissToast } = useToastQueue();
   const [catalog, setCatalog] = useState<CatalogApp[]>([]);
-  const [appsOpen, setAppsOpen] = useState(true);
-  const [selectedApps, setSelectedApps] = useState<string[]>([]);
   const [showAddApp, setShowAddApp] = useState(false);
   const [newApp, setNewApp] = useState({
     label: "",
@@ -90,11 +93,9 @@ export function App() {
     githubRepo: "",
     apkUrl: "",
   });
-  const [manualOpen, setManualOpen] = useState(false);
   const [manualSource, setManualSource] = useState<ManualSource>("model_search");
   const [manualTargets, setManualTargets] = useState<CatalogApp[]>([]);
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
-  const [vpnOpen, setVpnOpen] = useState(false);
   const [vpnForm, setVpnForm] = useState({
     query: "",
     phone: "",
@@ -116,7 +117,6 @@ export function App() {
     shopId?: string | null;
     phone?: string | null;
   } | null>(null);
-  const [gmailOpen, setGmailOpen] = useState(false);
   const [gmailForm, setGmailForm] = useState({
     firstName: "",
     lastName: "",
@@ -131,7 +131,6 @@ export function App() {
     humanNext?: string[];
     filled?: string[];
   } | null>(null);
-  const [phoneSettingsOpen, setPhoneSettingsOpen] = useState(false);
   const [phoneCategories, setPhoneCategories] = useState<
     { id: string; titleFa: string; titleEn: string }[]
   >([]);
@@ -160,6 +159,34 @@ export function App() {
   const [error, setError] = useState<string | null>(null);
   const [actionMsg, setActionMsg] = useState<string | null>(null);
 
+  const { toasts, pushToast, dismissToast } = useToastQueue();
+
+  const activeTab: AppTab = useMemo(() => {
+    const p = location.pathname;
+    if (p.startsWith("/agent")) return "agent";
+    if (p.startsWith("/settings")) return "settings";
+    if (
+      p.startsWith("/bench") ||
+      p.startsWith("/vpn") ||
+      p.startsWith("/gmail") ||
+      p.startsWith("/phone-settings") ||
+      p.startsWith("/manual")
+    ) {
+      return "bench";
+    }
+    return "home";
+  }, [location.pathname]);
+
+  const prevTabRef = useRef<AppTab>(activeTab);
+
+  useEffect(() => {
+    if (prevTabRef.current === activeTab) return;
+    const from = TAB_ORDER.indexOf(prevTabRef.current);
+    const to = TAB_ORDER.indexOf(activeTab);
+    if (from !== to) setSlideDir(to > from ? "next" : "prev");
+    prevTabRef.current = activeTab;
+  }, [activeTab]);
+
   const selectedSerial = useMemo(
     () => deviceSerial || devices.find((d) => d.status === "device")?.serial || "",
     [deviceSerial, devices],
@@ -178,11 +205,18 @@ export function App() {
   const dir = dirFor(locale);
 
   function goTab(next: AppTab) {
+    const paths: Record<AppTab, string> = {
+      home: "/",
+      agent: "/agent",
+      bench: "/bench",
+      settings: "/settings",
+    };
+    const target = paths[next];
+    if (location.pathname === target) return;
     const from = TAB_ORDER.indexOf(activeTab);
     const to = TAB_ORDER.indexOf(next);
-    if (from === to) return;
-    setSlideDir(to > from ? "next" : "prev");
-    setActiveTab(next);
+    if (from !== to) setSlideDir(to > from ? "next" : "prev");
+    navigate(target);
   }
 
   useEffect(() => {
@@ -352,12 +386,6 @@ export function App() {
     }
   }
 
-  function toggleAppSelect(packageId: string) {
-    setSelectedApps((prev) =>
-      prev.includes(packageId) ? prev.filter((p) => p !== packageId) : [...prev, packageId],
-    );
-  }
-
   async function installFromPlayDirect(apps: CatalogApp[]) {
     if (!apps.length) return;
     setBusy(true);
@@ -390,13 +418,12 @@ export function App() {
       pushToast(notes.join(" · "), "info");
       if (failed.length) {
         setManualTargets(failed);
-        setManualOpen(true);
+        navigate("/manual");
       }
-      setSelectedApps([]);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
       setManualTargets(apps);
-      setManualOpen(true);
+      navigate("/manual");
       pushToast(t(locale, "playFail"), "error");
     } finally {
       setBusy(false);
@@ -404,10 +431,7 @@ export function App() {
   }
 
   async function runManualInstall() {
-    const apps =
-      manualTargets.length > 0
-        ? manualTargets
-        : catalog.filter((a) => selectedApps.includes(a.packageId));
+    const apps = manualTargets;
     if (!apps.length) {
       setError(t(locale, "needLabelPackage"));
       return;
@@ -990,112 +1014,149 @@ export function App() {
 
       <div className="tab-stage" key={activeTab}>
         <div className={`tab-panel dir-${slideDir}`}>
-          {activeTab === "home" ? (
-            <HomePage
-              locale={locale}
-              phoneConnected={phoneConnected}
-              deviceCount={devices.length}
-              wifiSsid={network?.wifiSsid}
-              shopSsid={health?.shopWifiSsid || shopSsid}
-              onGo={goTab}
+          <Routes>
+            <Route
+              path="/"
+              element={
+                <HomePage
+                  locale={locale}
+                  phoneConnected={phoneConnected}
+                  deviceCount={devices.length}
+                  wifiSsid={network?.wifiSsid}
+                  shopSsid={health?.shopWifiSsid || shopSsid}
+                  onGo={goTab}
+                />
+              }
             />
-          ) : null}
-
-          {activeTab === "agent" ? (
-            <AgentPage
-              locale={locale}
-              messages={messages}
-              pendingAction={pendingAction}
-              input={input}
-              inputRef={inputRef}
-              busy={busy}
-              onInput={setInput}
-              onSend={(confirm) => void send(confirm)}
-              onVoiceSend={sendVoice}
-              onCancelPending={() => setPendingAction(null)}
-              onVoiceError={onVoiceError}
+            <Route
+              path="/agent"
+              element={
+                <AgentPage
+                  locale={locale}
+                  messages={messages}
+                  pendingAction={pendingAction}
+                  input={input}
+                  inputRef={inputRef}
+                  busy={busy}
+                  onInput={setInput}
+                  onSend={(confirm) => void send(confirm)}
+                  onVoiceSend={sendVoice}
+                  onCancelPending={() => setPendingAction(null)}
+                  onVoiceError={onVoiceError}
+                />
+              }
             />
-          ) : null}
-
-          {activeTab === "bench" ? (
-            <BenchPage
-              locale={locale}
-              devices={devices}
-              selectedSerial={selectedSerial}
-              network={network}
-              shopWifiSsid={health?.shopWifiSsid || shopSsid}
-              catalog={catalog}
-              appsOpen={appsOpen}
-              selectedApps={selectedApps}
-              showAddApp={showAddApp}
-              newApp={newApp}
-              manualOpen={manualOpen}
-              manualSource={manualSource}
-              manualTargets={manualTargets}
-              manualSourceOptions={manualSourceOptions}
-              vpnOpen={vpnOpen}
-              vpnForm={vpnForm}
-              vpnLookupFound={vpnLookupFound}
-              vpnResult={vpnResult}
-              gmailOpen={gmailOpen}
-              gmailForm={gmailForm}
-              gmailResult={gmailResult}
-              backupJob={backupJob}
-              busy={busy}
-              actionMsg={actionMsg}
-              error={error}
-              onDeviceSerial={setDeviceSerial}
-              onToggleWifi={(enabled) => void toggleWifi(enabled)}
-              onShopWifiForget={() => void shopWifi("forget")}
-              onAppsOpen={setAppsOpen}
-              onToggleAppSelect={toggleAppSelect}
-              onInstallPlay={(apps) => void installFromPlayDirect(apps)}
-              onShowAddApp={setShowAddApp}
-              onNewApp={(patch) => setNewApp((s) => ({ ...s, ...patch }))}
-              onAddCatalogApp={() => void addCatalogApp()}
-              onVpnOpen={setVpnOpen}
-              onVpnForm={(patch) => setVpnForm((s) => ({ ...s, ...patch }))}
-              onLookupVpn={() => void lookupVpn()}
-              onProvisionVpn={() => void provisionVpn()}
-              onCopyVpnLink={() => void copyVpnLink()}
-              onDeleteVpn={() => void deleteVpnAccount()}
-              onGmailOpen={setGmailOpen}
-              onGmailForm={(patch) => setGmailForm((s) => ({ ...s, ...patch }))}
-              onAssistGmail={() => void assistGmail()}
-              onCopyGmailPassword={() => void copyGmailPassword()}
-              phoneSettingsOpen={phoneSettingsOpen}
-              phoneCategories={phoneCategories}
-              phoneIssues={phoneIssues}
-              phoneCategory={phoneCategory}
-              phoneDetectMap={phoneDetectMap}
-              onPhoneSettingsOpen={setPhoneSettingsOpen}
-              onPhoneCategory={setPhoneCategory}
-              onPhoneDetect={(id) => void detectPhoneIssue(id)}
-              onPhoneFix={(id) => void fixPhoneIssue(id)}
-              onManualOpen={setManualOpen}
-              onManualSource={setManualSource}
-              onRunManual={() => void runManualInstall()}
-              onStartBackup={() => void startBackup()}
-              onBackupAction={(action) => void backupAction(action)}
+            <Route
+              path="/bench"
+              element={
+                <BenchPage
+                  locale={locale}
+                  devices={devices}
+                  selectedSerial={selectedSerial}
+                  network={network}
+                  shopWifiSsid={health?.shopWifiSsid || shopSsid}
+                  catalog={catalog}
+                  showAddApp={showAddApp}
+                  newApp={newApp}
+                  backupJob={backupJob}
+                  busy={busy}
+                  actionMsg={actionMsg}
+                  error={error}
+                  onDeviceSerial={setDeviceSerial}
+                  onToggleWifi={(enabled) => void toggleWifi(enabled)}
+                  onShopWifiForget={() => void shopWifi("forget")}
+                  onInstallPlay={(apps) => void installFromPlayDirect(apps)}
+                  onShowAddApp={setShowAddApp}
+                  onNewApp={(patch) => setNewApp((s) => ({ ...s, ...patch }))}
+                  onAddCatalogApp={() => void addCatalogApp()}
+                  onStartBackup={() => void startBackup()}
+                  onBackupAction={(action) => void backupAction(action)}
+                />
+              }
             />
-          ) : null}
-
-          {activeTab === "settings" ? (
-            <SettingsPage
-              locale={locale}
-              theme={theme}
-              shopSsid={shopSsid}
-              shopPassword={shopPassword}
-              hasShopWifiPassword={Boolean(health?.hasShopWifiPassword)}
-              settingsMsg={settingsMsg}
-              busy={busy}
-              onTheme={(next) => void changeTheme(next)}
-              onLocale={(next) => void changeLocale(next)}
-              onShopSsid={setShopSsid}
-              onShopPassword={setShopPassword}
-              onSave={() => void saveShopSettings()}
+            <Route
+              path="/vpn"
+              element={
+                <VpnPage
+                  locale={locale}
+                  vpnForm={vpnForm}
+                  vpnLookupFound={vpnLookupFound}
+                  vpnResult={vpnResult}
+                  busy={busy}
+                  onVpnForm={(patch) => setVpnForm((s) => ({ ...s, ...patch }))}
+                  onLookupVpn={() => void lookupVpn()}
+                  onProvisionVpn={() => void provisionVpn()}
+                  onCopyVpnLink={() => void copyVpnLink()}
+                  onDeleteVpn={() => void deleteVpnAccount()}
+                />
+              }
             />
-          ) : null}
+            <Route
+              path="/gmail"
+              element={
+                <GmailPage
+                  locale={locale}
+                  gmailForm={gmailForm}
+                  gmailResult={gmailResult}
+                  selectedSerial={selectedSerial}
+                  busy={busy}
+                  onGmailForm={(patch) => setGmailForm((s) => ({ ...s, ...patch }))}
+                  onAssistGmail={() => void assistGmail()}
+                  onCopyGmailPassword={() => void copyGmailPassword()}
+                />
+              }
+            />
+            <Route
+              path="/phone-settings"
+              element={
+                <PhoneSettingsPage
+                  locale={locale}
+                  phoneCategories={phoneCategories}
+                  phoneIssues={phoneIssues}
+                  phoneCategory={phoneCategory}
+                  phoneDetectMap={phoneDetectMap}
+                  busy={busy}
+                  onPhoneCategory={setPhoneCategory}
+                  onPhoneDetect={(id) => void detectPhoneIssue(id)}
+                  onPhoneFix={(id) => void fixPhoneIssue(id)}
+                />
+              }
+            />
+            <Route
+              path="/manual"
+              element={
+                <ManualInstallPage
+                  locale={locale}
+                  manualSource={manualSource}
+                  manualTargets={manualTargets}
+                  manualSourceOptions={manualSourceOptions}
+                  busy={busy}
+                  onManualSource={setManualSource}
+                  onRunManual={() => void runManualInstall()}
+                />
+              }
+            />
+            <Route
+              path="/settings"
+              element={
+                <SettingsPage
+                  locale={locale}
+                  theme={theme}
+                  shopSsid={shopSsid}
+                  shopPassword={shopPassword}
+                  hasShopWifiPassword={Boolean(health?.hasShopWifiPassword)}
+                  settingsMsg={settingsMsg}
+                  busy={busy}
+                  onTheme={(next) => void changeTheme(next)}
+                  onLocale={(next) => void changeLocale(next)}
+                  onShopSsid={setShopSsid}
+                  onShopPassword={setShopPassword}
+                  onSave={() => void saveShopSettings()}
+                />
+              }
+            />
+            <Route path="*" element={<Navigate to="/" replace />} />
+          </Routes>
         </div>
       </div>
 
