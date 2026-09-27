@@ -324,7 +324,7 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
 
   server.tool(
     "provision_vpn",
-    "Create or renew a Pasargad VPN account. days + gigabytes required; optional phone builds 0912...(id). Optional query looks up existing first.",
+    "Create or renew a Pasargad VPN account. days + gigabytes required; optional phone builds 0912…@id. Optional query looks up existing first.",
     {
       days: z.number().positive(),
       gigabytes: z.number().positive(),

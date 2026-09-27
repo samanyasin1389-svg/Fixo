@@ -526,11 +526,11 @@ export async function handleChat(input: {
     }),
     provision_vpn: tool({
       description:
-        "Create or renew a Pasargad/PasarGuard VPN account and push config to V2Box. Ask for days + gigabytes. Optional phone number — username becomes 0912...(id). Optional query/phone looks up existing account first. Shop id is auto-assigned.",
+        "Create or renew a Pasargad/PasarGuard VPN account and push config to V2Box. Ask for days + gigabytes. Optional phone number — username becomes 0912…@id. Optional query/phone looks up existing account first. Shop id is auto-assigned.",
       parameters: z.object({
         days: z.number().positive().describe("Account duration in days"),
         gigabytes: z.number().positive().describe("Data limit in GB"),
-        phone: z.string().optional().describe("Optional customer phone for username 0912...(id)"),
+        phone: z.string().optional().describe("Optional customer phone for username 0912…@id"),
         query: z
           .string()
           .optional()
@@ -596,7 +596,7 @@ export async function handleChat(input: {
     }),
     lookup_vpn: tool({
       description:
-        "Lookup a Pasargad VPN account by phone number or shop id (number in parentheses). Returns remaining GB, used traffic, days left/expired. Use when technician asks وضعیت اکانت / چک کن / مشخصات وی‌پی‌ان.",
+        "Lookup a Pasargad VPN account by phone number or shop id (number after @). Returns remaining GB, used traffic, days left/expired. Use when technician asks وضعیت اکانت / چک کن / مشخصات وی‌پی‌ان.",
       parameters: z.object({
         query: z.string().describe("Phone number or shop id like 12"),
       }),
@@ -626,7 +626,7 @@ export async function handleChat(input: {
     }),
     delete_vpn: tool({
       description:
-        "Permanently delete a Pasargad/PasarGuard VPN account by username (e.g. 12 or 0912...(12)). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
+        "Permanently delete a Pasargad/PasarGuard VPN account by username (e.g. 12 or 0912…@12). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
       parameters: z.object({
         username: z.string().describe("Username or shop id to delete"),
       }),
@@ -737,7 +737,7 @@ export async function handleChat(input: {
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
 اگر گفت وضعیت اکانت وی‌پی‌ان / چک کن / مشخصات پاسارگاد: lookup_vpn با شماره یا شناسه.
-اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس / فیلترشکن: از provision_vpn با days + gigabytes استفاده کن. شماره تلفن اختیاری است (می‌شود 0912...(id)). شناسه را سیستم می‌سازد. اگر days یا gigabytes نبود بپرس.
+اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس / فیلترشکن: از provision_vpn با days + gigabytes استفاده کن. شماره تلفن اختیاری است (می‌شود 0912…@id). شناسه را سیستم می‌سازد. اگر days یا gigabytes نبود بپرس.
 اگر گفت اکانت وی‌پی‌ان / پاسارگاد را پاک کن یا حذف کن: delete_vpn را با username یا شناسه بزن.
 اگر گفت یادداشت/فایل/یادآوری بساز یا بنویس: create_shop_note را با title و content بزن (روی Desktop/Fixo-Notes ذخیره می‌شود).
 اگر گفت جیمیل بساز / ساخت جیمیل / اکانت گوگل: assist_gmail_signup را بزن. اگر نام یا نام‌خانوادگی نبود بپرس؛ username و password اختیاری‌اند (رمز را سیستم می‌سازد). بگو صفحه روی گوشی باز شد و کپچا/پیامک را تعمیرکار تمام کند — ادعا نکن جیمیل کامل ساخته شد.

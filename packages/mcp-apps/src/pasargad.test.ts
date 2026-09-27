@@ -33,11 +33,15 @@ describe("nextNumericUsernameFrom", () => {
     assert.equal(nextNumericUsernameFrom([]), "1");
   });
 
-  it("increments max pure-numeric and paren ids", () => {
+  it("increments max pure-numeric and @ ids", () => {
     assert.equal(
-      nextNumericUsernameFrom(["1", "09121234567(3)", "user", "2"]),
+      nextNumericUsernameFrom(["1", "09121234567@3", "user", "2"]),
       "4",
     );
+  });
+
+  it("still counts legacy paren ids", () => {
+    assert.equal(nextNumericUsernameFrom(["09121234567(5)", "4"]), "6");
   });
 
   it("ignores phone numbers without shop id", () => {
@@ -46,18 +50,23 @@ describe("nextNumericUsernameFrom", () => {
 });
 
 describe("formatVpnUsername / extract", () => {
-  it("formats phone with shop id", () => {
-    assert.equal(formatVpnUsername("0912 123 4567", 12), "09121234567(12)");
+  it("formats phone with shop id using @", () => {
+    assert.equal(formatVpnUsername("0912 123 4567", 12), "09121234567@12");
   });
 
   it("formats id-only when no phone", () => {
     assert.equal(formatVpnUsername("", 7), "7");
   });
 
-  it("extracts phone and shop id", () => {
+  it("extracts phone and shop id from @ format", () => {
+    assert.equal(extractPhone("09121234567@12"), "09121234567");
+    assert.equal(extractShopId("09121234567@12"), "12");
+    assert.equal(extractShopId("12"), "12");
+  });
+
+  it("still extracts legacy paren format", () => {
     assert.equal(extractPhone("09121234567(12)"), "09121234567");
     assert.equal(extractShopId("09121234567(12)"), "12");
-    assert.equal(extractShopId("12"), "12");
   });
 
   it("normalizes persian digits", () => {
@@ -66,13 +75,17 @@ describe("formatVpnUsername / extract", () => {
 });
 
 describe("userMatchesQuery", () => {
-  it("matches by shop id in parentheses", () => {
+  it("matches by shop id after @", () => {
+    assert.equal(userMatchesQuery("09121234567@12", "12"), true);
+  });
+
+  it("matches legacy paren shop id", () => {
     assert.equal(userMatchesQuery("09121234567(12)", "12"), true);
     assert.equal(userMatchesQuery("09121234567(12)", "(12)"), true);
   });
 
   it("matches by phone", () => {
-    assert.equal(userMatchesQuery("09121234567(12)", "09121234567"), true);
+    assert.equal(userMatchesQuery("09121234567@12", "09121234567"), true);
   });
 
   it("matches legacy numeric username", () => {
@@ -84,7 +97,7 @@ describe("buildAccountSummary", () => {
   it("computes remaining traffic and days", () => {
     const user: PasargadUser = {
       id: 1,
-      username: "09120000000(1)",
+      username: "09120000000@1",
       status: "active",
       expire: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString(),
       data_limit: 10 * 1024 * 1024 * 1024,

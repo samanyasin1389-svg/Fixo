@@ -123,35 +123,39 @@ export function normalizeDigits(raw: string): string {
     .replace(/\D+/g, "");
 }
 
-/** Extract shop sequential id from `12` or `0912...(12)`. */
+/** Extract shop sequential id from `12`, `0912…@12`, or legacy `0912…(12)`. */
 export function extractShopId(username: string): string | null {
   const u = String(username ?? "").trim();
+  const at = u.match(/@(\d{1,6})\s*$/);
+  if (at?.[1]) return at[1];
   const paren = u.match(/\((\d{1,6})\)\s*$/);
   if (paren?.[1]) return paren[1];
   if (/^\d{1,6}$/.test(u)) return u;
   return null;
 }
 
-/** Extract phone prefix from `09121234567(12)`. */
+/** Extract phone prefix from `09121234567@12` or legacy `09121234567(12)`. */
 export function extractPhone(username: string): string | null {
   const u = String(username ?? "").trim();
-  const m = u.match(/^(\d{8,15})\(\d{1,6}\)$/);
-  if (m?.[1]) return m[1];
+  const at = u.match(/^(\d{8,15})@\d{1,6}$/);
+  if (at?.[1]) return at[1];
+  const paren = u.match(/^(\d{8,15})\(\d{1,6}\)$/);
+  if (paren?.[1]) return paren[1];
   if (/^\d{8,15}$/.test(u)) return u;
   return null;
 }
 
-/** Format username: `0912...(12)` when phone given, else `12`. */
+/** Format username: `0912…@12` when phone given, else `12`. */
 export function formatVpnUsername(phone: string | undefined | null, shopId: string | number): string {
   const id = String(shopId).trim();
   const digits = normalizeDigits(phone ?? "");
-  if (digits.length >= 8) return `${digits}(${id})`;
+  if (digits.length >= 8) return `${digits}@${id}`;
   return id;
 }
 
 /**
  * Next sequential shop id from existing usernames.
- * Counts pure numeric ids (1–6 digits) and ids inside trailing `(N)`.
+ * Counts pure numeric ids (1–6 digits) and ids after `@` or inside trailing `(N)`.
  */
 export function nextNumericUsernameFrom(usernames: Iterable<string>): string {
   let max = 0;
@@ -503,13 +507,13 @@ export function createPasargadClient(options: PasargadClientOptions = {}) {
   }): Promise<{ user: PasargadUser; username: string }> {
     let shopId = await allocateNumericId();
     const phoneDigits = normalizeDigits(input.phone ?? "");
-    const preferParen = phoneDigits.length >= 8;
+    const preferPhone = phoneDigits.length >= 8;
 
     for (let attempt = 0; attempt < 30; attempt++) {
-      const candidates = preferParen
+      const candidates = preferPhone
         ? [
             formatVpnUsername(phoneDigits, shopId),
-            // Fallback if panel rejects parentheses
+            // Fallbacks if panel rejects @
             `${phoneDigits}_${shopId}`,
             shopId,
           ]
@@ -544,7 +548,7 @@ export function createPasargadClient(options: PasargadClientOptions = {}) {
   async function provision(input: {
     /** Explicit username (full). Prefer phone for new shop format. */
     username?: string;
-    /** Optional phone — used to build `0912...(id)` and for lookup. */
+    /** Optional phone — used to build `0912…@id` and for lookup. */
     phone?: string;
     /** Search query (phone or shop id) to renew existing account. */
     query?: string;
