@@ -1064,6 +1064,37 @@ button:disabled {
   word-break: break-all;
 }
 
+.phone-settings .source-list {
+  max-height: 160px;
+  overflow: auto;
+}
+
+.phone-issue-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.phone-issue {
+  padding: 10px 0;
+  border-top: 1px solid color-mix(in srgb, var(--text) 12%, transparent);
+}
+
+.phone-issue:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.phone-issue ul {
+  margin: 6px 0;
+  padding-inline-start: 1.2em;
+}
+
+.phone-issue .danger {
+  color: var(--danger, #e07070);
+}
+
 /* —— Aurora / galaxy background —— */
 .aurora-bg {
   position: fixed;
