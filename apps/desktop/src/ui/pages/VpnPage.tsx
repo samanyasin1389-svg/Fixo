@@ -7,6 +7,7 @@ export type VpnFormState = {
   phone: string;
   days: string;
   gigabytes: string;
+  shopId: string;
 };
 
 export type VpnResultState = {
@@ -29,16 +30,25 @@ type Props = {
   vpnForm: VpnFormState;
   vpnLookupFound: boolean | null;
   vpnResult: VpnResultState;
+  suggestedShopId: string | null;
   busy: boolean;
   onVpnForm: (patch: Partial<VpnFormState>) => void;
   onLookupVpn: () => void;
   onProvisionVpn: () => void;
   onCopyVpnLink: () => void;
   onDeleteVpn: () => void;
+  onUseSuggestedId: () => void;
 };
 
 export function VpnPage(props: Props) {
-  const { locale, vpnForm, vpnLookupFound, vpnResult, busy } = props;
+  const {
+    locale,
+    vpnForm,
+    vpnLookupFound,
+    vpnResult,
+    suggestedShopId,
+    busy,
+  } = props;
 
   return (
     <SubPageShell locale={locale} title={t(locale, "vpnSection")}>
@@ -48,7 +58,7 @@ export function VpnPage(props: Props) {
           className="field"
           placeholder={t(locale, "vpnQuery")}
           value={vpnForm.query}
-          onChange={(e) => props.onVpnForm({ query: e.target.value })}
+          onChange={(e) => props.onVpnForm({ query: e.target.value, shopId: "" })}
           inputMode="tel"
         />
         <button
@@ -129,6 +139,20 @@ export function VpnPage(props: Props) {
           />
         ) : null}
         <div className="suggest-chips">
+          {suggestedShopId ? (
+            <button
+              type="button"
+              className={
+                vpnForm.shopId === suggestedShopId
+                  ? "secondary chip chip-accent active"
+                  : "secondary chip chip-accent"
+              }
+              disabled={busy}
+              onClick={() => props.onUseSuggestedId()}
+            >
+              {t(locale, "vpnSuggestNextId")}: {suggestedShopId}
+            </button>
+          ) : null}
           <button
             type="button"
             className="secondary chip"
@@ -151,6 +175,11 @@ export function VpnPage(props: Props) {
             {t(locale, "vpnSuggest100")}
           </button>
         </div>
+        {vpnForm.shopId ? (
+          <p className="muted tiny">
+            {t(locale, "vpnSuggestedId")}: <strong>{vpnForm.shopId}</strong>
+          </p>
+        ) : null}
         <input
           className="field"
           type="number"

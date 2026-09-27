@@ -920,6 +920,37 @@ button:disabled {
   margin-top: 10px;
 }
 
+.backup-start-btn {
+  width: 100%;
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 52px !important;
+  font-weight: 700;
+  font-size: 1rem !important;
+  border-radius: 16px !important;
+}
+
+.install-net-prompt {
+  margin-top: 14px;
+  padding: 12px;
+  border-radius: 14px;
+  border: 1px solid color-mix(in srgb, var(--accent) 45%, transparent);
+  background: color-mix(in srgb, var(--accent) 10%, transparent);
+  display: grid;
+  gap: 10px;
+}
+
+.install-net-prompt .muted {
+  margin: 0;
+}
+
+.danger-btn {
+  border-color: color-mix(in srgb, var(--danger) 55%, transparent) !important;
+  color: var(--danger) !important;
+}
+
 .progress-track {
   height: 10px;
   border-radius: 999px;
@@ -1048,6 +1079,16 @@ button:disabled {
   padding: 6px 12px !important;
   font-size: 0.78rem !important;
   border-radius: 999px !important;
+}
+
+.chip-accent {
+  border-color: color-mix(in srgb, var(--accent-bright) 55%, transparent) !important;
+  color: var(--accent-bright) !important;
+  font-weight: 700 !important;
+}
+
+.chip-accent.active {
+  background: color-mix(in srgb, var(--accent) 22%, transparent) !important;
 }
 
 .vpn-result {

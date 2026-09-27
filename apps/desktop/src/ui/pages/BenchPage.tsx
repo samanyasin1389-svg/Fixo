@@ -3,6 +3,7 @@ import type { Locale } from "../i18n";
 import { t } from "../i18n";
 import {
   IconApps,
+  IconBackup,
   IconChevron,
   IconMail,
   IconNetwork,
@@ -52,6 +53,11 @@ function pillLabel(v: boolean | null) {
   return v ? "ON" : "OFF";
 }
 
+function backupActive(job: BackupJob | null) {
+  if (!job) return false;
+  return !["done", "cancelled", "error"].includes(job.phase);
+}
+
 export type BenchPageProps = {
   locale: Locale;
   devices: Device[];
@@ -68,6 +74,7 @@ export type BenchPageProps = {
     apkUrl: string;
   };
   backupJob: BackupJob | null;
+  showInstallNetworkPrompt: boolean;
   busy: boolean;
   actionMsg: string | null;
   error: string | null;
@@ -80,6 +87,9 @@ export type BenchPageProps = {
   onAddCatalogApp: () => void;
   onStartBackup: () => void;
   onBackupAction: (action: "pause" | "resume" | "cancel") => void;
+  onEnableWifiForInstall: () => void;
+  onEnableMobileForInstall: () => void;
+  onDismissInstallNetworkPrompt: () => void;
 };
 
 export function BenchPage(props: BenchPageProps) {
@@ -93,12 +103,14 @@ export function BenchPage(props: BenchPageProps) {
     showAddApp,
     newApp,
     backupJob,
+    showInstallNetworkPrompt,
     busy,
     actionMsg,
     error,
   } = props;
 
   const pinned = catalog.filter((a) => a.pinned !== false).slice(0, 4);
+  const backupRunning = backupActive(backupJob);
 
   const tools = [
     { to: "/vpn", label: t(locale, "vpnSection"), Icon: IconShield },
@@ -123,6 +135,12 @@ export function BenchPage(props: BenchPageProps) {
           <span>{t(locale, "wifi")}</span>
           <span className={pillClass(network?.wifiEnabled ?? null)}>
             {pillLabel(network?.wifiEnabled ?? null)}
+          </span>
+        </div>
+        <div className="status-row">
+          <span>{t(locale, "mobileData")}</span>
+          <span className={pillClass(network?.mobileDataEnabled ?? null)}>
+            {pillLabel(network?.mobileDataEnabled ?? null)}
           </span>
         </div>
         <div className="status-row">
@@ -167,6 +185,37 @@ export function BenchPage(props: BenchPageProps) {
       </div>
 
       {actionMsg ? <p className="muted">{actionMsg}</p> : null}
+
+      {showInstallNetworkPrompt ? (
+        <div className="install-net-prompt" role="dialog" aria-live="polite">
+          <p className="muted">{t(locale, "installNeedNetwork")}</p>
+          <div className="actions">
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => props.onEnableWifiForInstall()}
+            >
+              {t(locale, "installEnableWifi")}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => props.onEnableMobileForInstall()}
+            >
+              {t(locale, "installEnableMobile")}
+            </button>
+            <button
+              type="button"
+              className="secondary"
+              disabled={busy}
+              onClick={() => props.onDismissInstallNetworkPrompt()}
+            >
+              {t(locale, "cancel")}
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <div className="section-gap">
         <div className="disclosure static">
@@ -264,11 +313,24 @@ export function BenchPage(props: BenchPageProps) {
       </div>
 
       <div className="section-gap">
-        <h2>{t(locale, "backupPhone")}</h2>
+        <div className="disclosure static">
+          <span className="disclosure-with-icon">
+            <IconBackup size={18} />
+            <span>{t(locale, "backupPhone")}</span>
+          </span>
+        </div>
         <p className="muted">{t(locale, "backupHint")}</p>
-        <button type="button" disabled={busy} onClick={() => props.onStartBackup()}>
-          {t(locale, "startBackup")}
-        </button>
+        {!backupRunning ? (
+          <button
+            type="button"
+            className="backup-start-btn"
+            disabled={busy}
+            onClick={() => props.onStartBackup()}
+          >
+            <IconBackup size={20} />
+            <span>{t(locale, "startBackup")}</span>
+          </button>
+        ) : null}
 
         {backupJob ? (
           <div className="backup-box">
@@ -283,36 +345,36 @@ export function BenchPage(props: BenchPageProps) {
               {backupJob.currentTarget ? ` — ${backupJob.currentTarget}` : ""}
               {` (${backupJob.percent}%)`}
             </p>
-            <div className="actions">
-              {backupJob.phase === "paused" ? (
+            {backupRunning ? (
+              <div className="actions">
+                {backupJob.phase === "paused" ? (
+                  <button
+                    type="button"
+                    className="secondary"
+                    onClick={() => props.onBackupAction("resume")}
+                  >
+                    {t(locale, "resume")}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="secondary"
+                    disabled={["cancelling"].includes(backupJob.phase)}
+                    onClick={() => props.onBackupAction("pause")}
+                  >
+                    {t(locale, "pause")}
+                  </button>
+                )}
                 <button
                   type="button"
-                  className="secondary"
-                  onClick={() => props.onBackupAction("resume")}
+                  className="secondary danger-btn"
+                  disabled={["cancelling"].includes(backupJob.phase)}
+                  onClick={() => props.onBackupAction("cancel")}
                 >
-                  {t(locale, "resume")}
+                  {t(locale, "cancel")}
                 </button>
-              ) : (
-                <button
-                  type="button"
-                  className="secondary"
-                  disabled={["done", "cancelled", "error", "cancelling"].includes(
-                    backupJob.phase,
-                  )}
-                  onClick={() => props.onBackupAction("pause")}
-                >
-                  {t(locale, "pause")}
-                </button>
-              )}
-              <button
-                type="button"
-                className="secondary"
-                disabled={["done", "cancelled", "error"].includes(backupJob.phase)}
-                onClick={() => props.onBackupAction("cancel")}
-              >
-                {t(locale, "cancel")}
-              </button>
-            </div>
+              </div>
+            ) : null}
             {backupJob.phase === "done" && backupJob.folder ? (
               <p className="muted tiny">{backupJob.folder}</p>
             ) : null}

@@ -10,6 +10,7 @@ import {
   getNetworkStatus,
   listDevices,
   resolveSerial,
+  setMobileData,
   setWifi,
 } from "@fixo/mcp-network";
 import { handleChat } from "../agent/chat.js";
@@ -113,6 +114,38 @@ app.get("/api/network", async (req, res) => {
     const { serial } = await resolveSerial(adb, serialParam);
     const { status, evidence } = await getNetworkStatus(adb, serial);
     res.json({ ok: true, deviceSerial: serial, status, evidence });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/network/mobile-data", async (req, res) => {
+  try {
+    const enabled = Boolean(req.body?.enabled);
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { serial } = await resolveSerial(adb, serialParam);
+    const change = await setMobileData(adb, serial, enabled);
+    await new Promise((r) => setTimeout(r, 700));
+    const { status, evidence } = await getNetworkStatus(adb, serial);
+    const applied =
+      status.mobileDataEnabled === null || status.mobileDataEnabled === enabled;
+    res.json({
+      ok: applied,
+      deviceSerial: serial,
+      status,
+      evidence: [...change.evidence, ...evidence],
+      message: enabled
+        ? applied
+          ? "اینترنت موبایل روشن شد"
+          : "دستور ارسال شد؛ وضعیت اینترنت موبایل نامشخص است"
+        : applied
+          ? "اینترنت موبایل خاموش شد"
+          : "دستور ارسال شد؛ وضعیت اینترنت موبایل نامشخص است",
+    });
   } catch (err) {
     res.status(500).json({
       ok: false,
@@ -527,6 +560,37 @@ app.post("/api/backup/:jobId/:action", async (req, res) => {
   }
 });
 
+app.get("/api/vpn/next-id", async (_req, res) => {
+  try {
+    const { createPasargadClient } = await import("@fixo/mcp-apps");
+    const client = createPasargadClient();
+    if (!client.hasCredentials) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+      });
+      return;
+    }
+    const shopId = await client.allocateNumericId();
+    res.json({ ok: true, shopId });
+  } catch (err) {
+    const { PasargadError } = await import("@fixo/mcp-apps");
+    if (err instanceof PasargadError) {
+      res.status(err.statusCode && err.statusCode >= 400 ? err.statusCode : 500).json({
+        ok: false,
+        message: err.message,
+        detail: err.detail,
+      });
+      return;
+    }
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/vpn/lookup", async (req, res) => {
   try {
     const query = String(req.body?.query ?? req.body?.phone ?? req.body?.username ?? "").trim();
@@ -577,14 +641,17 @@ app.post("/api/vpn/provision", async (req, res) => {
 
     const phone =
       typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    const shopId =
+      typeof req.body?.shopId === "string" ? req.body.shopId.trim() : "";
     const query =
       typeof req.body?.query === "string"
         ? req.body.query.trim()
-        : typeof req.body?.username === "string"
-          ? req.body.username.trim()
-          : "";
+        : "";
+    const explicitUsername =
+      typeof req.body?.username === "string" ? req.body.username.trim() : "";
 
-    const { createPasargadClient, pushConfigToV2Box } = await import("@fixo/mcp-apps");
+    const { createPasargadClient, formatVpnUsername, pushConfigToV2Box } =
+      await import("@fixo/mcp-apps");
     const client = createPasargadClient();
     if (!client.hasCredentials) {
       res.status(400).json({
@@ -595,11 +662,17 @@ app.post("/api/vpn/provision", async (req, res) => {
       return;
     }
 
+    const usernameFromShopId =
+      shopId && /^\d{1,6}$/.test(shopId)
+        ? formatVpnUsername(phone || undefined, shopId)
+        : "";
+
     const account = await client.provision({
       days,
       gigabytes,
       phone: phone || undefined,
       query: query || phone || undefined,
+      username: explicitUsername || usernameFromShopId || undefined,
     });
 
     let push: {

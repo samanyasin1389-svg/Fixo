@@ -310,6 +310,19 @@ export function IconWrench(props: IconProps) {
   );
 }
 
+export function IconBackup(props: IconProps) {
+  return (
+    <Svg {...props}>
+      <path
+        d="M7 7.5A5 5 0 0 1 17 8.2 3.8 3.8 0 0 1 17.5 15.5H7.2A4.2 4.2 0 0 1 7 7.5Z"
+        {...stroke}
+      />
+      <path d="M12 11.5v6" {...stroke} />
+      <path d="m9.5 15.2 2.5 2.5 2.5-2.5" {...stroke} />
+    </Svg>
+  );
+}
+
 export const CATEGORY_ICONS: Record<string, (props: IconProps) => ReactElement> = {
   dashboard: IconDashboard,
   battery: IconBattery,

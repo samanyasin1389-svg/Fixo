@@ -96,12 +96,18 @@ export function App() {
   const [manualSource, setManualSource] = useState<ManualSource>("model_search");
   const [manualTargets, setManualTargets] = useState<CatalogApp[]>([]);
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
+  const [pendingInstallApps, setPendingInstallApps] = useState<CatalogApp[] | null>(
+    null,
+  );
+  const [showInstallNetworkPrompt, setShowInstallNetworkPrompt] = useState(false);
   const [vpnForm, setVpnForm] = useState({
     query: "",
     phone: "",
     days: "",
     gigabytes: "",
+    shopId: "",
   });
+  const [vpnSuggestedId, setVpnSuggestedId] = useState<string | null>(null);
   const [vpnLookupFound, setVpnLookupFound] = useState<boolean | null>(null);
   const [vpnResult, setVpnResult] = useState<{
     username?: string;
@@ -237,6 +243,15 @@ export function App() {
     });
   }, [locale, welcomeSet]);
 
+  async function loadVpnSuggestedId() {
+    try {
+      const res = await fetch("/api/vpn/next-id").then((r) => r.json());
+      if (res.ok && res.shopId) setVpnSuggestedId(String(res.shopId));
+    } catch {
+      /* ignore */
+    }
+  }
+
   async function loadCatalog() {
     try {
       const res = await fetch("/api/apps/catalog").then((r) => r.json());
@@ -292,10 +307,17 @@ export function App() {
     void refresh();
     void loadCatalog();
     void loadPhoneSettingsCatalog();
+    void loadVpnSuggestedId();
     const id = setInterval(() => void refresh(), 5000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  useEffect(() => {
+    if (location.pathname.startsWith("/vpn")) {
+      void loadVpnSuggestedId();
+    }
+  }, [location.pathname]);
 
   useEffect(() => {
     if (!backupJob?.jobId) return;
@@ -386,7 +408,28 @@ export function App() {
     }
   }
 
-  async function installFromPlayDirect(apps: CatalogApp[]) {
+  function networkIsOnline(status: NetworkStatus | null | undefined) {
+    if (!status) return false;
+    return Boolean(status.wifiConnected) || status.mobileDataEnabled === true;
+  }
+
+  async function fetchNetworkStatus(): Promise<NetworkStatus | null> {
+    try {
+      const serial = selectedSerial || undefined;
+      const n = await fetch(
+        `/api/network${serial ? `?deviceSerial=${encodeURIComponent(serial)}` : ""}`,
+      ).then((r) => r.json());
+      if (n.ok && n.status) {
+        setNetwork(n.status);
+        return n.status as NetworkStatus;
+      }
+    } catch {
+      /* ignore */
+    }
+    return network;
+  }
+
+  async function runPlayInstall(apps: CatalogApp[]) {
     if (!apps.length) return;
     setBusy(true);
     pushToast(t(locale, "installing"), "info");
@@ -425,6 +468,80 @@ export function App() {
       setManualTargets(apps);
       navigate("/manual");
       pushToast(t(locale, "playFail"), "error");
+    } finally {
+      setBusy(false);
+      setPendingInstallApps(null);
+      setShowInstallNetworkPrompt(false);
+    }
+  }
+
+  async function installFromPlayDirect(apps: CatalogApp[]) {
+    if (!apps.length) return;
+    const status = (await fetchNetworkStatus()) ?? network;
+    if (!networkIsOnline(status)) {
+      setPendingInstallApps(apps);
+      setShowInstallNetworkPrompt(true);
+      pushToast(t(locale, "installNeedNetwork"), "error");
+      return;
+    }
+    await runPlayInstall(apps);
+  }
+
+  async function enableWifiForInstall() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/network/wifi", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: true,
+          deviceSerial: selectedSerial || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.status) setNetwork(data.status);
+      pushToast(data.message ?? "OK", data.ok ? "success" : "error");
+      const status = (data.status as NetworkStatus | undefined) ?? (await fetchNetworkStatus());
+      if (networkIsOnline(status) && pendingInstallApps?.length) {
+        const apps = pendingInstallApps;
+        setShowInstallNetworkPrompt(false);
+        await runPlayInstall(apps);
+        return;
+      }
+      pushToast(t(locale, "installStillOffline"), "error");
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function enableMobileForInstall() {
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/network/mobile-data", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          enabled: true,
+          deviceSerial: selectedSerial || undefined,
+        }),
+      });
+      const data = await res.json();
+      if (data.status) setNetwork(data.status);
+      pushToast(data.message ?? "OK", data.ok ? "success" : "error");
+      const status = (data.status as NetworkStatus | undefined) ?? (await fetchNetworkStatus());
+      if (networkIsOnline(status) && pendingInstallApps?.length) {
+        const apps = pendingInstallApps;
+        setShowInstallNetworkPrompt(false);
+        await runPlayInstall(apps);
+        return;
+      }
+      pushToast(t(locale, "installStillOffline"), "error");
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
       setBusy(false);
     }
@@ -511,6 +628,10 @@ export function App() {
   }
 
   async function startBackup() {
+    if (backupJob && !["done", "cancelled", "error"].includes(backupJob.phase)) {
+      pushToast(t(locale, "backupBusy"), "info");
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -520,13 +641,18 @@ export function App() {
         body: JSON.stringify({ deviceSerial: selectedSerial || undefined }),
       });
       const data = await res.json();
-      if (!data.ok) setError(data.message ?? "Failed");
-      else {
+      if (!data.ok) {
+        const msg = data.message ?? "Failed";
+        setError(msg);
+        pushToast(msg, "error");
+      } else {
         setBackupJob(data.job);
         pushToast(t(locale, "backupStarted"), "success");
       }
     } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
     } finally {
       setBusy(false);
     }
@@ -646,10 +772,12 @@ export function App() {
     pushToast(t(locale, "vpnBusy"), "info");
     try {
       const phone = vpnForm.phone.trim() || undefined;
+      const shopId = vpnForm.shopId.trim() || undefined;
       const query =
         vpnResult?.username ||
         vpnForm.query.trim() ||
         phone ||
+        shopId ||
         undefined;
       const res = await fetch("/api/vpn/provision", {
         method: "POST",
@@ -659,6 +787,7 @@ export function App() {
           gigabytes,
           phone,
           query,
+          shopId,
           deviceSerial: selectedSerial || undefined,
           pushToDevice: true,
         }),
@@ -686,7 +815,9 @@ export function App() {
         shopId: summary?.shopId,
         phone: summary?.phone,
       });
+      setVpnForm((s) => ({ ...s, shopId: "" }));
       pushToast(data.message ?? data.account?.message ?? "OK", data.push?.ok === false ? "error" : "success");
+      await loadVpnSuggestedId();
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setError(msg);
@@ -729,6 +860,7 @@ export function App() {
       setVpnResult(null);
       setVpnLookupFound(null);
       pushToast(data.message ?? t(locale, "vpnDeleted"), "success");
+      await loadVpnSuggestedId();
     } catch (err) {
       pushToast(err instanceof Error ? err.message : String(err), "error");
     } finally {
@@ -1059,6 +1191,7 @@ export function App() {
                   showAddApp={showAddApp}
                   newApp={newApp}
                   backupJob={backupJob}
+                  showInstallNetworkPrompt={showInstallNetworkPrompt}
                   busy={busy}
                   actionMsg={actionMsg}
                   error={error}
@@ -1071,6 +1204,12 @@ export function App() {
                   onAddCatalogApp={() => void addCatalogApp()}
                   onStartBackup={() => void startBackup()}
                   onBackupAction={(action) => void backupAction(action)}
+                  onEnableWifiForInstall={() => void enableWifiForInstall()}
+                  onEnableMobileForInstall={() => void enableMobileForInstall()}
+                  onDismissInstallNetworkPrompt={() => {
+                    setShowInstallNetworkPrompt(false);
+                    setPendingInstallApps(null);
+                  }}
                 />
               }
             />
@@ -1082,12 +1221,23 @@ export function App() {
                   vpnForm={vpnForm}
                   vpnLookupFound={vpnLookupFound}
                   vpnResult={vpnResult}
+                  suggestedShopId={vpnSuggestedId}
                   busy={busy}
                   onVpnForm={(patch) => setVpnForm((s) => ({ ...s, ...patch }))}
                   onLookupVpn={() => void lookupVpn()}
                   onProvisionVpn={() => void provisionVpn()}
                   onCopyVpnLink={() => void copyVpnLink()}
                   onDeleteVpn={() => void deleteVpnAccount()}
+                  onUseSuggestedId={() => {
+                    if (!vpnSuggestedId) return;
+                    setVpnForm((s) => ({
+                      ...s,
+                      shopId: vpnSuggestedId,
+                      query: s.query.trim() ? s.query : vpnSuggestedId,
+                    }));
+                    setVpnLookupFound(null);
+                    setVpnResult(null);
+                  }}
                 />
               }
             />

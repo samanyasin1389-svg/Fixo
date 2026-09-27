@@ -27,7 +27,10 @@ export type MessageKey =
   | "auto"
   | "onPlus"
   | "off"
+  | "wifiOn"
+  | "wifiOff"
   | "forgetShop"
+  | "forgetWifi"
   | "apps"
   | "installSelected"
   | "addApp"
@@ -121,6 +124,14 @@ export type MessageKey =
   | "phoneSettingsEmpty"
   | "backToBench"
   | "benchTools"
+  | "installNeedNetwork"
+  | "installEnableWifi"
+  | "installEnableMobile"
+  | "installStillOffline"
+  | "mobileData"
+  | "backupBusy"
+  | "vpnSuggestNextId"
+  | "vpnSuggestedId"
   | "settingsTheme"
   | "settingsLanguage"
   | "settingsVersion"
@@ -157,7 +168,10 @@ const fa: Record<MessageKey, string> = {
   auto: "خودکار",
   onPlus: "روشن +",
   off: "خاموش",
+  wifiOn: "روشن کردن وای‌فای",
+  wifiOff: "خاموش کردن وای‌فای",
   forgetShop: "فراموش مغازه",
+  forgetWifi: "فراموش",
   apps: "برنامه‌ها",
   installSelected: "نصب از پلی",
   addApp: "افزودن برنامه",
@@ -253,6 +267,14 @@ const fa: Record<MessageKey, string> = {
   phoneSettingsEmpty: "موردی در این دسته نیست",
   backToBench: "بازگشت به میزکار",
   benchTools: "ابزارها",
+  installNeedNetwork: "برای نصب، وای‌فای یا اینترنت موبایل را روشن کن.",
+  installEnableWifi: "روشن کردن وای‌فای مغازه",
+  installEnableMobile: "روشن کردن اینترنت موبایل",
+  installStillOffline: "هنوز اینترنت نیست — یکی را روشن کن و دوباره امتحان کن.",
+  mobileData: "دیتا",
+  backupBusy: "بک‌آپ قبلی هنوز تمام نشده",
+  vpnSuggestNextId: "شناسه بعدی",
+  vpnSuggestedId: "شناسه پیشنهادی",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
   settingsVersion: "نسخه",
@@ -290,7 +312,10 @@ const en: Record<MessageKey, string> = {
   auto: "Auto",
   onPlus: "On +",
   off: "Off",
+  wifiOn: "Turn Wi‑Fi on",
+  wifiOff: "Turn Wi‑Fi off",
   forgetShop: "Forget shop Wi‑Fi",
+  forgetWifi: "Forget",
   apps: "Apps",
   installSelected: "Install from Play",
   addApp: "Add app",
@@ -386,6 +411,14 @@ const en: Record<MessageKey, string> = {
   phoneSettingsEmpty: "No items in this category",
   backToBench: "Back to bench",
   benchTools: "Tools",
+  installNeedNetwork: "Turn on Wi‑Fi or mobile data before installing.",
+  installEnableWifi: "Enable shop Wi‑Fi",
+  installEnableMobile: "Enable mobile data",
+  installStillOffline: "Still offline — enable one and try again.",
+  mobileData: "Data",
+  backupBusy: "A backup is already running",
+  vpnSuggestNextId: "Next ID",
+  vpnSuggestedId: "Suggested ID",
   settingsTheme: "Appearance",
   settingsLanguage: "Language",
   settingsVersion: "Version",

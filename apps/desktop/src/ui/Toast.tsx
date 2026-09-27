@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 
 export type ToastKind = "info" | "success" | "error";
 
@@ -8,7 +8,7 @@ export type ToastItem = {
   kind: ToastKind;
 };
 
-const DURATION_MS = 10_000;
+const DURATION_MS = 4_000;
 
 type ToastHostProps = {
   toasts: ToastItem[];
@@ -24,23 +24,30 @@ function ToastCard({
 }) {
   const [progress, setProgress] = useState(100);
   const started = useRef(Date.now());
+  const onDismissRef = useRef(onDismiss);
+  onDismissRef.current = onDismiss;
 
   useEffect(() => {
     started.current = Date.now();
+    setProgress(100);
     let raf = 0;
     const tick = () => {
       const elapsed = Date.now() - started.current;
       const left = Math.max(0, 100 - (elapsed / DURATION_MS) * 100);
       setProgress(left);
-      if (elapsed >= DURATION_MS) {
-        onDismiss(toast.id);
-        return;
+      if (elapsed < DURATION_MS) {
+        raf = requestAnimationFrame(tick);
       }
-      raf = requestAnimationFrame(tick);
     };
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
-  }, [toast.id, onDismiss]);
+    const timer = window.setTimeout(() => {
+      onDismissRef.current(toast.id);
+    }, DURATION_MS);
+    return () => {
+      cancelAnimationFrame(raf);
+      window.clearTimeout(timer);
+    };
+  }, [toast.id]);
 
   return (
     <div className={`toast toast-${toast.kind}`} role="status">
@@ -77,16 +84,16 @@ export function useToastQueue() {
   const [toasts, setToasts] = useState<ToastItem[]>([]);
   const idRef = useRef(1);
 
-  function pushToast(message: string, kind: ToastKind = "info") {
+  const pushToast = useCallback((message: string, kind: ToastKind = "info") => {
     const trimmed = message.trim();
     if (!trimmed) return;
     const id = idRef.current++;
     setToasts((prev) => [...prev, { id, message: trimmed, kind }].slice(-4));
-  }
+  }, []);
 
-  function dismissToast(id: number) {
+  const dismissToast = useCallback((id: number) => {
     setToasts((prev) => prev.filter((t) => t.id !== id));
-  }
+  }, []);
 
   return { toasts, pushToast, dismissToast };
 }
