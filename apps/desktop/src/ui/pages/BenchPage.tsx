@@ -72,6 +72,21 @@ export type BenchPageProps = {
     subscriptionUrl?: string;
     message?: string;
   } | null;
+  gmailOpen: boolean;
+  gmailForm: {
+    firstName: string;
+    lastName: string;
+    username: string;
+    password: string;
+  };
+  gmailResult: {
+    emailHint?: string | null;
+    password?: string;
+    message?: string;
+    notePath?: string;
+    humanNext?: string[];
+    filled?: string[];
+  } | null;
   backupJob: BackupJob | null;
   busy: boolean;
   actionMsg: string | null;
@@ -90,6 +105,10 @@ export type BenchPageProps = {
   onProvisionVpn: () => void;
   onCopyVpnLink: () => void;
   onDeleteVpn: () => void;
+  onGmailOpen: (v: boolean) => void;
+  onGmailForm: (patch: Partial<BenchPageProps["gmailForm"]>) => void;
+  onAssistGmail: () => void;
+  onCopyGmailPassword: () => void;
   onManualOpen: (v: boolean) => void;
   onManualSource: (v: ManualSource) => void;
   onRunManual: () => void;
@@ -116,6 +135,9 @@ export function BenchPage(props: BenchPageProps) {
     vpnOpen,
     vpnForm,
     vpnResult,
+    gmailOpen,
+    gmailForm,
+    gmailResult,
     backupJob,
     busy,
     actionMsg,
@@ -393,6 +415,97 @@ export function BenchPage(props: BenchPageProps) {
                     {t(locale, "vpnDelete")}
                   </button>
                 )}
+              </div>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+
+      <div className="section-gap">
+        <button
+          type="button"
+          className="disclosure"
+          onClick={() => props.onGmailOpen(!gmailOpen)}
+        >
+          <span>{t(locale, "gmailSection")}</span>
+          <span className="chevron">{gmailOpen ? "▾" : "◂"}</span>
+        </button>
+        {gmailOpen ? (
+          <div className="vpn-body">
+            <p className="muted tiny">{t(locale, "gmailHint")}</p>
+            <input
+              className="field"
+              placeholder={t(locale, "gmailFirstName")}
+              value={gmailForm.firstName}
+              onChange={(e) => props.onGmailForm({ firstName: e.target.value })}
+            />
+            <input
+              className="field"
+              placeholder={t(locale, "gmailLastName")}
+              value={gmailForm.lastName}
+              onChange={(e) => props.onGmailForm({ lastName: e.target.value })}
+            />
+            <input
+              className="field"
+              placeholder={t(locale, "gmailUsername")}
+              value={gmailForm.username}
+              onChange={(e) => props.onGmailForm({ username: e.target.value })}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <input
+              className="field"
+              placeholder={t(locale, "gmailPasswordOptional")}
+              value={gmailForm.password}
+              onChange={(e) => props.onGmailForm({ password: e.target.value })}
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+            />
+            <button
+              type="button"
+              disabled={busy || !selectedSerial}
+              onClick={() => props.onAssistGmail()}
+            >
+              {t(locale, "gmailAssist")}
+            </button>
+            {gmailResult ? (
+              <div className="vpn-result">
+                {gmailResult.message ? (
+                  <p className="muted tiny">{gmailResult.message}</p>
+                ) : null}
+                {gmailResult.emailHint ? (
+                  <p className="muted">
+                    {t(locale, "gmailEmail")}: {gmailResult.emailHint}
+                  </p>
+                ) : null}
+                {gmailResult.password ? (
+                  <div className="actions">
+                    <p className="muted tiny">
+                      {t(locale, "gmailPassword")}: {gmailResult.password}
+                    </p>
+                    <button
+                      type="button"
+                      className="secondary"
+                      onClick={() => props.onCopyGmailPassword()}
+                    >
+                      {t(locale, "gmailCopyPassword")}
+                    </button>
+                  </div>
+                ) : null}
+                {gmailResult.notePath ? (
+                  <p className="muted tiny">
+                    {t(locale, "gmailNoteSaved")}: {gmailResult.notePath}
+                  </p>
+                ) : null}
+                {gmailResult.humanNext?.length ? (
+                  <ul className="muted tiny">
+                    {gmailResult.humanNext.map((step) => (
+                      <li key={step}>{step}</li>
+                    ))}
+                  </ul>
+                ) : null}
               </div>
             ) : null}
           </div>

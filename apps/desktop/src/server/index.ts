@@ -672,6 +672,43 @@ app.post("/api/vpn/delete", async (req, res) => {
   }
 });
 
+app.post("/api/gmail/assist", async (req, res) => {
+  try {
+    const firstName =
+      typeof req.body?.firstName === "string" ? req.body.firstName.trim() : "";
+    const lastName =
+      typeof req.body?.lastName === "string" ? req.body.lastName.trim() : "";
+    const username =
+      typeof req.body?.username === "string" ? req.body.username.trim() : "";
+    const password =
+      typeof req.body?.password === "string" ? req.body.password.trim() : "";
+    const saveNote = req.body?.saveNote !== false;
+    const tryFill = req.body?.tryFill !== false;
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+
+    const { assistGmailSignup } = await import("@fixo/mcp-apps");
+    const { serial } = await resolveSerial(adb, serialParam);
+    const result = await assistGmailSignup(adb, serial, {
+      firstName: firstName || undefined,
+      lastName: lastName || undefined,
+      username: username || undefined,
+      password: password || undefined,
+      saveNote,
+      tryFill,
+    });
+    res.status(result.ok ? 200 : 500).json({
+      ...result,
+      deviceSerial: serial,
+    });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/chat", async (req, res) => {
   try {
     if (!process.env.OPENAI_API_KEY) {

@@ -51,3 +51,10 @@ export {
   V2BOX_PACKAGE,
   type V2BoxPushResult,
 } from "./v2box.js";
+export {
+  assistGmailSignup,
+  generateGmailPassword,
+  GMAIL_SIGNUP_URL,
+  type GmailAssistInput,
+  type GmailAssistResult,
+} from "./gmail.js";

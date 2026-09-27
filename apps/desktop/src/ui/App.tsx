@@ -103,6 +103,21 @@ export function App() {
     subscriptionUrl?: string;
     message?: string;
   } | null>(null);
+  const [gmailOpen, setGmailOpen] = useState(false);
+  const [gmailForm, setGmailForm] = useState({
+    firstName: "",
+    lastName: "",
+    username: "",
+    password: "",
+  });
+  const [gmailResult, setGmailResult] = useState<{
+    emailHint?: string | null;
+    password?: string;
+    message?: string;
+    notePath?: string;
+    humanNext?: string[];
+    filled?: string[];
+  } | null>(null);
   const [messages, setMessages] = useState<Msg[]>([]);
   const [welcomeSet, setWelcomeSet] = useState(false);
   const [input, setInput] = useState("");
@@ -588,6 +603,68 @@ export function App() {
     }
   }
 
+  async function assistGmail() {
+    if (!selectedSerial) {
+      pushToast(t(locale, "gmailNeedDevice"), "error");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    setGmailResult(null);
+    pushToast(t(locale, "gmailBusy"), "info");
+    try {
+      const res = await fetch("/api/gmail/assist", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          firstName: gmailForm.firstName.trim() || undefined,
+          lastName: gmailForm.lastName.trim() || undefined,
+          username: gmailForm.username.trim() || undefined,
+          password: gmailForm.password.trim() || undefined,
+          deviceSerial: selectedSerial,
+          saveNote: true,
+          tryFill: true,
+        }),
+      });
+      const data = await res.json();
+      if (!data.ok) {
+        const msg = data.message ?? "Failed";
+        setError(msg);
+        pushToast(msg, "error");
+        return;
+      }
+      setGmailResult({
+        emailHint: data.emailHint,
+        password: data.password,
+        message: data.message,
+        notePath: data.notePath,
+        humanNext: data.humanNext,
+        filled: data.filled,
+      });
+      if (data.password && !gmailForm.password.trim()) {
+        setGmailForm((s) => ({ ...s, password: data.password }));
+      }
+      pushToast(data.message ?? "OK", "success");
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function copyGmailPassword() {
+    const pw = gmailResult?.password;
+    if (!pw) return;
+    try {
+      await navigator.clipboard.writeText(pw);
+      pushToast(t(locale, "gmailCopyPassword"), "success");
+    } catch {
+      pushToast(pw, "info");
+    }
+  }
+
   async function send(
     confirmAction = false,
     opts?: { fromVoice?: boolean; text?: string },
@@ -767,6 +844,9 @@ export function App() {
               vpnOpen={vpnOpen}
               vpnForm={vpnForm}
               vpnResult={vpnResult}
+              gmailOpen={gmailOpen}
+              gmailForm={gmailForm}
+              gmailResult={gmailResult}
               backupJob={backupJob}
               busy={busy}
               actionMsg={actionMsg}
@@ -785,6 +865,10 @@ export function App() {
               onProvisionVpn={() => void provisionVpn()}
               onCopyVpnLink={() => void copyVpnLink()}
               onDeleteVpn={() => void deleteVpnAccount()}
+              onGmailOpen={setGmailOpen}
+              onGmailForm={(patch) => setGmailForm((s) => ({ ...s, ...patch }))}
+              onAssistGmail={() => void assistGmail()}
+              onCopyGmailPassword={() => void copyGmailPassword()}
               onManualOpen={setManualOpen}
               onManualSource={setManualSource}
               onRunManual={() => void runManualInstall()}

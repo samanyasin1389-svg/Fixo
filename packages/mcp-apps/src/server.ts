@@ -386,6 +386,45 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
     },
   );
 
+  server.tool(
+    "assist_gmail_signup",
+    "Open Google/Gmail account signup on the phone and best-effort fill name/username. Generates a password, copies it to the phone clipboard, and can save a local shop note. CAPTCHA and SMS verification stay manual — do not claim full automation.",
+    {
+      firstName: z.string().optional(),
+      lastName: z.string().optional(),
+      username: z.string().optional().describe("Desired gmail local-part without @gmail.com"),
+      password: z.string().optional().describe("Optional; generated if omitted"),
+      saveNote: z.boolean().optional(),
+      tryFill: z.boolean().optional(),
+      deviceSerial: z.string().optional(),
+    },
+    async (args) => {
+      try {
+        const { assistGmailSignup } = await import("./gmail.js");
+        const { serial, evidence } = await resolveSerial(adb, args.deviceSerial);
+        const result = await assistGmailSignup(adb, serial, {
+          firstName: args.firstName,
+          lastName: args.lastName,
+          username: args.username,
+          password: args.password,
+          saveNote: args.saveNote,
+          tryFill: args.tryFill,
+        });
+        return jsonResult({
+          status: result.ok ? "ok" : "error",
+          message: result.message,
+          data: {
+            ...result,
+            deviceSerial: serial,
+            evidence: [...evidence, ...result.evidence],
+          },
+        }, result.ok);
+      } catch (err) {
+        return fail(err);
+      }
+    },
+  );
+
   return server;
 }
 
