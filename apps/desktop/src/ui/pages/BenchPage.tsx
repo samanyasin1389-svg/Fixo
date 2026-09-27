@@ -55,7 +55,7 @@ function pillLabel(v: boolean | null) {
 
 function backupActive(job: BackupJob | null) {
   if (!job) return false;
-  return !["done", "cancelled", "error"].includes(job.phase);
+  return !["done", "cancelled", "error", "cancelling"].includes(job.phase);
 }
 
 export type BenchPageProps = {
@@ -313,12 +313,6 @@ export function BenchPage(props: BenchPageProps) {
       </div>
 
       <div className="section-gap">
-        <div className="disclosure static">
-          <span className="disclosure-with-icon">
-            <IconBackup size={18} />
-            <span>{t(locale, "backupPhone")}</span>
-          </span>
-        </div>
         <p className="muted">{t(locale, "backupHint")}</p>
         {!backupRunning ? (
           <button
@@ -332,7 +326,7 @@ export function BenchPage(props: BenchPageProps) {
           </button>
         ) : null}
 
-        {backupJob ? (
+        {backupJob && backupRunning ? (
           <div className="backup-box">
             <div className="progress-track">
               <div
@@ -345,40 +339,37 @@ export function BenchPage(props: BenchPageProps) {
               {backupJob.currentTarget ? ` — ${backupJob.currentTarget}` : ""}
               {` (${backupJob.percent}%)`}
             </p>
-            {backupRunning ? (
-              <div className="actions">
-                {backupJob.phase === "paused" ? (
-                  <button
-                    type="button"
-                    className="secondary"
-                    onClick={() => props.onBackupAction("resume")}
-                  >
-                    {t(locale, "resume")}
-                  </button>
-                ) : (
-                  <button
-                    type="button"
-                    className="secondary"
-                    disabled={["cancelling"].includes(backupJob.phase)}
-                    onClick={() => props.onBackupAction("pause")}
-                  >
-                    {t(locale, "pause")}
-                  </button>
-                )}
+            <div className="actions">
+              {backupJob.phase === "paused" ? (
                 <button
                   type="button"
-                  className="secondary danger-btn"
-                  disabled={["cancelling"].includes(backupJob.phase)}
-                  onClick={() => props.onBackupAction("cancel")}
+                  className="secondary"
+                  onClick={() => props.onBackupAction("resume")}
                 >
-                  {t(locale, "cancel")}
+                  {t(locale, "resume")}
                 </button>
-              </div>
-            ) : null}
-            {backupJob.phase === "done" && backupJob.folder ? (
-              <p className="muted tiny">{backupJob.folder}</p>
-            ) : null}
+              ) : (
+                <button
+                  type="button"
+                  className="secondary"
+                  onClick={() => props.onBackupAction("pause")}
+                >
+                  {t(locale, "pause")}
+                </button>
+              )}
+              <button
+                type="button"
+                className="secondary danger-btn"
+                onClick={() => props.onBackupAction("cancel")}
+              >
+                {t(locale, "cancel")}
+              </button>
+            </div>
           </div>
+        ) : null}
+
+        {backupJob && !backupRunning && backupJob.phase === "done" && backupJob.folder ? (
+          <p className="muted tiny">{backupJob.folder}</p>
         ) : null}
       </div>
 

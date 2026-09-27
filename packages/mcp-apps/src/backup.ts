@@ -369,8 +369,10 @@ export class BackupJobManager {
     if (!job) return null;
     job.controls.cancelled = true;
     job.controls.paused = false;
-    job.progress.phase = "cancelling";
-    job.progress.message = "در حال لغو…";
+    // Mark cancelled immediately so UI is not stuck while adb pull finishes.
+    job.progress.phase = "cancelled";
+    job.progress.message = "بک‌آپ لغو شد";
+    job.progress.currentTarget = undefined;
     return { ...job.progress };
   }
 }

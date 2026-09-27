@@ -628,7 +628,7 @@ export function App() {
   }
 
   async function startBackup() {
-    if (backupJob && !["done", "cancelled", "error"].includes(backupJob.phase)) {
+    if (backupJob && !["done", "cancelled", "error", "cancelling"].includes(backupJob.phase)) {
       pushToast(t(locale, "backupBusy"), "info");
       return;
     }
@@ -665,7 +665,12 @@ export function App() {
       { method: "POST" },
     );
     const data = await res.json();
-    if (data.ok && data.job) setBackupJob(data.job);
+    if (data.ok && data.job) {
+      setBackupJob(data.job);
+      if (action === "cancel") {
+        pushToast(data.job.message ?? t(locale, "cancel"), "info");
+      }
+    }
   }
 
   async function toggleWifi(enabled: boolean) {
