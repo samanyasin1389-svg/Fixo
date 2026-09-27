@@ -1095,6 +1095,38 @@ button:disabled {
   color: var(--danger, #e07070);
 }
 
+.disclosure-with-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.phone-cat-list {
+  display: grid !important;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 220px;
+}
+
+.phone-cat-btn {
+  display: inline-flex !important;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 8px;
+  text-align: start;
+  min-height: 42px;
+  padding-inline: 10px !important;
+}
+
+.phone-cat-btn svg {
+  flex-shrink: 0;
+  opacity: 0.9;
+}
+
+.phone-cat-btn.active svg {
+  color: var(--accent-bright);
+}
+
 /* —— Aurora / galaxy background —— */
 .aurora-bg {
   position: fixed;
@@ -1390,7 +1422,8 @@ html[dir="rtl"] .tab-panel.dir-prev {
 .home-shortcut {
   display: flex;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-start;
+  gap: 12px;
   width: 100%;
   text-align: start;
   color: var(--ink) !important;
@@ -1402,9 +1435,22 @@ html[dir="rtl"] .tab-panel.dir-prev {
     inset 0 1px 0 rgba(232, 224, 255, 0.06) !important;
 }
 
+.home-shortcut-icon {
+  display: grid;
+  place-items: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  color: var(--accent-bright);
+  background: color-mix(in srgb, var(--accent) 16%, transparent);
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, transparent);
+  flex-shrink: 0;
+}
+
 .home-shortcut .home-shortcut-arrow {
   color: var(--accent-bright);
   opacity: 0.85;
+  margin-inline-start: auto;
 }
 
 .home-shortcut:hover:not(:disabled) {
@@ -1444,6 +1490,20 @@ html[dir="rtl"] .tab-panel.dir-prev {
 
 .settings-theme-name {
   margin: 0;
+}
+
+.settings-version-block {
+  padding-top: 4px;
+  border-top: 1px solid color-mix(in srgb, var(--text) 10%, transparent);
+  padding-top: 16px;
+}
+
+.settings-version {
+  margin: 0;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  font-size: 1.15rem;
+  letter-spacing: 0.04em;
+  color: var(--accent-bright);
 }
 
 .settings-stack .settings-box,

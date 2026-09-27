@@ -1,6 +1,7 @@
 import type { Locale, Theme } from "../i18n";
 import { t } from "../i18n";
 import { ThemeFanButton } from "../ThemeFanButton";
+import { APP_VERSION_LABEL } from "../../version";
 
 type SettingsPageProps = {
   locale: Locale;
@@ -100,6 +101,14 @@ export function SettingsPage({
           </button>
           {settingsMsg ? <p className="muted">{settingsMsg}</p> : null}
         </div>
+      </div>
+
+      <div className="settings-block settings-version-block">
+        <p className="settings-label">{t(locale, "settingsVersion")}</p>
+        <p className="settings-version" title="Fixo app version">
+          {APP_VERSION_LABEL}
+        </p>
+        <p className="muted tiny">{t(locale, "settingsVersionHint")}</p>
       </div>
     </section>
   );

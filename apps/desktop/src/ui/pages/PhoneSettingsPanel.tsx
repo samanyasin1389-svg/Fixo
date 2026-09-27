@@ -1,5 +1,6 @@
 import type { Locale } from "../i18n";
 import { t } from "../i18n";
+import { CATEGORY_ICONS, IconSettings } from "../icons";
 
 export type PhoneSettingCategory = {
   id: string;
@@ -59,25 +60,34 @@ export function PhoneSettingsPanel(props: Props) {
         className="disclosure"
         onClick={() => props.onOpen(!open)}
       >
-        <span>{t(locale, "phoneSettingsSection")}</span>
+        <span className="disclosure-with-icon">
+          <IconSettings size={18} />
+          <span>{t(locale, "phoneSettingsSection")}</span>
+        </span>
         <span className="chevron">{open ? "▾" : "◂"}</span>
       </button>
       {open ? (
         <div className="vpn-body phone-settings">
           <p className="muted tiny">{t(locale, "phoneSettingsHint")}</p>
-          <div className="source-list">
-            {categories.map((c) => (
-              <button
-                key={c.id}
-                type="button"
-                className={
-                  activeCategory === c.id ? "source-btn active" : "source-btn"
-                }
-                onClick={() => props.onCategory(c.id)}
-              >
-                {isFa ? c.titleFa : c.titleEn}
-              </button>
-            ))}
+          <div className="source-list phone-cat-list">
+            {categories.map((c) => {
+              const Icon = CATEGORY_ICONS[c.id] ?? IconSettings;
+              return (
+                <button
+                  key={c.id}
+                  type="button"
+                  className={
+                    activeCategory === c.id
+                      ? "source-btn phone-cat-btn active"
+                      : "source-btn phone-cat-btn"
+                  }
+                  onClick={() => props.onCategory(c.id)}
+                >
+                  <Icon size={18} />
+                  <span>{isFa ? c.titleFa : c.titleEn}</span>
+                </button>
+              );
+            })}
           </div>
           <div className="phone-issue-list">
             {filtered.map((issue) => {
@@ -102,7 +112,7 @@ export function PhoneSettingsPanel(props: Props) {
                     </p>
                   ) : null}
                   <ul className="muted tiny">
-                    {issue.stepsFa.slice(0, isFa ? 4 : 4).map((s) => (
+                    {issue.stepsFa.slice(0, 4).map((s) => (
                       <li key={s}>{s}</li>
                     ))}
                   </ul>
