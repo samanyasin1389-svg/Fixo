@@ -526,14 +526,19 @@ export async function handleChat(input: {
     }),
     provision_vpn: tool({
       description:
-        "Create a Pasargad/PasarGuard VPN account and push the subscription config into V2Box on the phone. Use when technician asks for وی‌پی‌ان / پاسارگاد / VPN / فیلترشکن. Only days and gigabytes are required — ask if missing. Username is assigned automatically as sequential numbers (1, 2, 3, …). Do not ask for or invent a username.",
+        "Create or renew a Pasargad/PasarGuard VPN account and push config to V2Box. Ask for days + gigabytes. Optional phone number — username becomes 0912...(id). Optional query/phone looks up existing account first. Shop id is auto-assigned.",
       parameters: z.object({
         days: z.number().positive().describe("Account duration in days"),
         gigabytes: z.number().positive().describe("Data limit in GB"),
+        phone: z.string().optional().describe("Optional customer phone for username 0912...(id)"),
+        query: z
+          .string()
+          .optional()
+          .describe("Lookup existing by phone or shop id like 12"),
         deviceSerial: z.string().optional(),
         pushToDevice: z.boolean().default(true),
       }),
-      execute: async ({ days, gigabytes, deviceSerial, pushToDevice }) => {
+      execute: async ({ days, gigabytes, phone, query, deviceSerial, pushToDevice }) => {
         try {
           const client = createPasargadClient();
           if (!client.hasCredentials) {
@@ -543,7 +548,12 @@ export async function handleChat(input: {
                 "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
             });
           }
-          const account = await client.provision({ days, gigabytes });
+          const account = await client.provision({
+            days,
+            gigabytes,
+            phone,
+            query: query || phone,
+          });
           let push = null;
           if (pushToDevice !== false) {
             const { serial, evidence } = await resolveSerial(
@@ -564,6 +574,7 @@ export async function handleChat(input: {
           return toolJson({
             ok: true,
             account,
+            summary: account.summary,
             push,
             message: push?.ok
               ? `${account.message} — ${push.message}`
@@ -583,11 +594,41 @@ export async function handleChat(input: {
         }
       },
     }),
+    lookup_vpn: tool({
+      description:
+        "Lookup a Pasargad VPN account by phone number or shop id (number in parentheses). Returns remaining GB, used traffic, days left/expired. Use when technician asks وضعیت اکانت / چک کن / مشخصات وی‌پی‌ان.",
+      parameters: z.object({
+        query: z.string().describe("Phone number or shop id like 12"),
+      }),
+      execute: async ({ query }) => {
+        try {
+          const client = createPasargadClient();
+          if (!client.hasCredentials) {
+            return toolJson({
+              ok: false,
+              message:
+                "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+            });
+          }
+          const result = await client.searchUsers(query);
+          return toolJson(result);
+        } catch (err) {
+          if (err instanceof PasargadError) {
+            return toolJson({
+              ok: false,
+              message: err.message,
+              detail: err.detail,
+            });
+          }
+          throw err;
+        }
+      },
+    }),
     delete_vpn: tool({
       description:
-        "Permanently delete a Pasargad/PasarGuard VPN account by username (numeric id like 1, 2, 3). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
+        "Permanently delete a Pasargad/PasarGuard VPN account by username (e.g. 12 or 0912...(12)). Use when technician says اکانت را پاک کن / حذف کن / حذف وی‌پی‌ان.",
       parameters: z.object({
-        username: z.string().describe("Numeric username to delete (e.g. 12)"),
+        username: z.string().describe("Username or shop id to delete"),
       }),
       execute: async ({ username }) => {
         try {
@@ -599,7 +640,10 @@ export async function handleChat(input: {
                 "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
             });
           }
-          const existing = await client.lookupUser(username);
+          let target = username.trim();
+          const found = await client.searchUsers(target);
+          if (found.primary) target = found.primary.username;
+          const existing = await client.lookupUser(target);
           if (!existing) {
             return toolJson({
               ok: false,
@@ -688,12 +732,13 @@ export async function handleChat(input: {
   const system = `تو Fixo هستی؛ دستیار نرم‌افزاری تعمیرکار موبایل اندروید در مغازه.
 مثل یک نفر پشت پیشخوان حرف بزن: کوتاه، فارسی، بدون تعارف الکی و بدون ایموجی.
 کاربر ممکن است با میکروفون/صدا دستور بدهد — همان دستورهای صوتی را مثل متن جدی بگیر و ابزار بزن.
-ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, delete_vpn, create_shop_note, assist_gmail_signup.
+ابزارها: list_devices, get_device_info, get_network_status, set_wifi, set_mobile_data, set_airplane_mode, connect_shop_wifi, forget_shop_wifi, check_app_installed, list_catalog_apps, add_catalog_app, open_play_listing, install_from_play, install_app, backup_phone, backup_control, provision_vpn, lookup_vpn, delete_vpn, create_shop_note, assist_gmail_signup.
 مهم: وقتی کاربر گفت Wi-Fi / وای‌فای را روشن کن، از set_wifi با enabled=true استفاده کن؛ به وای‌فای مغازه (${input.shopWifi.ssid}) هم وصل می‌شود.
 اگر گفت اپی را نصب کن: فوراً install_from_play را بزن — بدون پرسیدن اکانت پلی یا منبع. اگر ناموفق بود بگو از پلی نصب نشد و تعمیرکار از «نصب دستی» امتحان کند. فقط اگر صریحاً گفت APK/گیت‌هاب/جستجو/لینک، از install_app با همان source و fallback=false استفاده کن.
 اگر گفت بک‌آپ بگیر، backup_phone را بزن. برای توقف/ادامه/لغو از backup_control.
-اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس / فیلترشکن: از provision_vpn با days + gigabytes استفاده کن. نام‌کاربری را سیستم خودش عددی می‌سازد — نپرس و از خودت نساز. اگر days یا gigabytes نبود بپرس.
-اگر گفت اکانت وی‌پی‌ان / پاسارگاد فلان نام‌کاربری (عدد) را پاک کن یا حذف کن: delete_vpn را با همان username بزن.
+اگر گفت وضعیت اکانت وی‌پی‌ان / چک کن / مشخصات پاسارگاد: lookup_vpn با شماره یا شناسه.
+اگر گفت وی‌پی‌ان بساز / پاسارگاد / کانفیگ وی‌توباکس / فیلترشکن: از provision_vpn با days + gigabytes استفاده کن. شماره تلفن اختیاری است (می‌شود 0912...(id)). شناسه را سیستم می‌سازد. اگر days یا gigabytes نبود بپرس.
+اگر گفت اکانت وی‌پی‌ان / پاسارگاد را پاک کن یا حذف کن: delete_vpn را با username یا شناسه بزن.
 اگر گفت یادداشت/فایل/یادآوری بساز یا بنویس: create_shop_note را با title و content بزن (روی Desktop/Fixo-Notes ذخیره می‌شود).
 اگر گفت جیمیل بساز / ساخت جیمیل / اکانت گوگل: assist_gmail_signup را بزن. اگر نام یا نام‌خانوادگی نبود بپرس؛ username و password اختیاری‌اند (رمز را سیستم می‌سازد). بگو صفحه روی گوشی باز شد و کپچا/پیامک را تعمیرکار تمام کند — ادعا نکن جیمیل کامل ساخته شد.
 جواب کوتاه و فارسی. رمز وای‌فای و کلید API را هیچ‌وقت ننویس. رمز جیمیل ساخته‌شده را فقط وقتی ابزار برگرداند، کوتاه بگو.`;

@@ -39,12 +39,19 @@ export {
   createPasargadClient,
   normalizePasargadApiKey,
   nextNumericUsernameFrom,
+  formatVpnUsername,
+  extractShopId,
+  extractPhone,
+  userMatchesQuery,
+  buildAccountSummary,
   PasargadError,
   type PasargadClient,
   type PasargadClientOptions,
   type PasargadUser,
   type ProvisionResult,
   type ProvisionAction,
+  type AccountSummary,
+  type LookupResult,
 } from "./pasargad.js";
 export {
   pushConfigToV2Box,
@@ -58,3 +65,15 @@ export {
   type GmailAssistInput,
   type GmailAssistResult,
 } from "./gmail.js";
+export {
+  listPhoneSettingsCatalog,
+  getIssueById,
+  detectPhoneSetting,
+  fixPhoneSetting,
+  PHONE_SETTING_CATEGORIES,
+  PHONE_SETTING_ISSUES,
+  type SettingIssue,
+  type SettingCategory,
+  type DetectResult,
+  type FixResult,
+} from "./phone-settings.js";

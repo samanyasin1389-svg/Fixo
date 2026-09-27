@@ -95,13 +95,26 @@ export function App() {
   const [manualTargets, setManualTargets] = useState<CatalogApp[]>([]);
   const [backupJob, setBackupJob] = useState<BackupJob | null>(null);
   const [vpnOpen, setVpnOpen] = useState(false);
-  const [vpnForm, setVpnForm] = useState({ days: "", gigabytes: "" });
+  const [vpnForm, setVpnForm] = useState({
+    query: "",
+    phone: "",
+    days: "",
+    gigabytes: "",
+  });
+  const [vpnLookupFound, setVpnLookupFound] = useState<boolean | null>(null);
   const [vpnResult, setVpnResult] = useState<{
     username?: string;
     status?: string;
     action?: string;
     subscriptionUrl?: string;
     message?: string;
+    remainingGb?: number | null;
+    usedGb?: number | null;
+    totalGb?: number | null;
+    remainingDays?: number | null;
+    expired?: boolean;
+    shopId?: string | null;
+    phone?: string | null;
   } | null>(null);
   const [gmailOpen, setGmailOpen] = useState(false);
   const [gmailForm, setGmailForm] = useState({
@@ -118,6 +131,26 @@ export function App() {
     humanNext?: string[];
     filled?: string[];
   } | null>(null);
+  const [phoneSettingsOpen, setPhoneSettingsOpen] = useState(false);
+  const [phoneCategories, setPhoneCategories] = useState<
+    { id: string; titleFa: string; titleEn: string }[]
+  >([]);
+  const [phoneIssues, setPhoneIssues] = useState<
+    {
+      id: string;
+      categoryId: string;
+      titleFa: string;
+      titleEn: string;
+      kind: "detect" | "fix" | "guide";
+      stepsFa: string[];
+      detectKey?: string;
+      fixKey?: string;
+    }[]
+  >([]);
+  const [phoneCategory, setPhoneCategory] = useState("network");
+  const [phoneDetectMap, setPhoneDetectMap] = useState<
+    Record<string, { issueId: string; status: "ok" | "problem" | "unknown"; message: string }>
+  >({});
   const [messages, setMessages] = useState<Msg[]>([]);
   const [welcomeSet, setWelcomeSet] = useState(false);
   const [input, setInput] = useState("");
@@ -224,6 +257,7 @@ export function App() {
   useEffect(() => {
     void refresh();
     void loadCatalog();
+    void loadPhoneSettingsCatalog();
     const id = setInterval(() => void refresh(), 5000);
     return () => clearInterval(id);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -518,6 +552,64 @@ export function App() {
     }
   }
 
+  async function lookupVpn() {
+    const query = vpnForm.query.trim();
+    if (!query) {
+      pushToast(t(locale, "vpnNeedQuery"), "error");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/vpn/lookup", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ query }),
+      });
+      const data = await res.json();
+      if (!data.ok && data.found !== false) {
+        const msg = data.message ?? "Failed";
+        setError(msg);
+        pushToast(msg, "error");
+        return;
+      }
+      if (data.found && data.primary) {
+        const p = data.primary;
+        setVpnLookupFound(true);
+        setVpnResult({
+          username: p.username,
+          status: p.status,
+          subscriptionUrl: p.subscriptionUrl,
+          message: data.message,
+          remainingGb: p.remainingGb,
+          usedGb: p.usedGb,
+          totalGb: p.totalGb,
+          remainingDays: p.remainingDays,
+          expired: p.expired,
+          shopId: p.shopId,
+          phone: p.phone,
+        });
+        if (p.phone) setVpnForm((s) => ({ ...s, phone: p.phone }));
+        pushToast(data.message ?? "OK", "success");
+      } else {
+        setVpnLookupFound(false);
+        setVpnResult(null);
+        // Prefill phone from query when it looks like a phone
+        const digits = query.replace(/\D+/g, "");
+        if (digits.length >= 8) {
+          setVpnForm((s) => ({ ...s, phone: digits }));
+        }
+        pushToast(data.message ?? t(locale, "vpnNotFoundCreate"), "info");
+      }
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      setError(msg);
+      pushToast(msg, "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   async function provisionVpn() {
     const days = Number(vpnForm.days);
     const gigabytes = Number(vpnForm.gigabytes);
@@ -527,15 +619,22 @@ export function App() {
     }
     setBusy(true);
     setError(null);
-    setVpnResult(null);
     pushToast(t(locale, "vpnBusy"), "info");
     try {
+      const phone = vpnForm.phone.trim() || undefined;
+      const query =
+        vpnResult?.username ||
+        vpnForm.query.trim() ||
+        phone ||
+        undefined;
       const res = await fetch("/api/vpn/provision", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           days,
           gigabytes,
+          phone,
+          query,
           deviceSerial: selectedSerial || undefined,
           pushToDevice: true,
         }),
@@ -547,12 +646,21 @@ export function App() {
         pushToast(msg, "error");
         return;
       }
+      const summary = data.summary ?? data.account?.summary;
+      setVpnLookupFound(true);
       setVpnResult({
         username: data.account?.username,
         status: data.account?.status,
         action: data.account?.action,
         subscriptionUrl: data.account?.subscriptionUrl,
         message: data.message,
+        remainingGb: summary?.remainingGb,
+        usedGb: summary?.usedGb,
+        totalGb: summary?.totalGb,
+        remainingDays: summary?.remainingDays,
+        expired: summary?.expired,
+        shopId: summary?.shopId,
+        phone: summary?.phone,
       });
       pushToast(data.message ?? data.account?.message ?? "OK", data.push?.ok === false ? "error" : "success");
     } catch (err) {
@@ -576,7 +684,7 @@ export function App() {
   }
 
   async function deleteVpnAccount() {
-    const target = (vpnResult?.username ?? "").trim();
+    const target = (vpnResult?.username ?? vpnForm.query.trim()).trim();
     if (!target) {
       pushToast(t(locale, "vpnNeedDeleteUser"), "error");
       return;
@@ -595,6 +703,7 @@ export function App() {
         return;
       }
       setVpnResult(null);
+      setVpnLookupFound(null);
       pushToast(data.message ?? t(locale, "vpnDeleted"), "success");
     } catch (err) {
       pushToast(err instanceof Error ? err.message : String(err), "error");
@@ -662,6 +771,89 @@ export function App() {
       pushToast(t(locale, "gmailCopyPassword"), "success");
     } catch {
       pushToast(pw, "info");
+    }
+  }
+
+  async function loadPhoneSettingsCatalog() {
+    try {
+      const res = await fetch("/api/phone-settings/catalog");
+      const data = await res.json();
+      if (data.ok) {
+        setPhoneCategories(data.categories ?? []);
+        setPhoneIssues(data.issues ?? []);
+        if (data.categories?.[0]?.id) {
+          setPhoneCategory((cur) => cur || data.categories[0].id);
+        }
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+
+  async function detectPhoneIssue(issueId: string) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/phone-settings/detect", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ issueId, deviceSerial: selectedSerial || undefined }),
+      });
+      const data = await res.json();
+      if (!data.ok && data.status == null) {
+        pushToast(data.message ?? "Failed", "error");
+        return;
+      }
+      setPhoneDetectMap((m) => ({
+        ...m,
+        [issueId]: {
+          issueId,
+          status: data.status ?? "unknown",
+          message: data.message ?? "",
+        },
+      }));
+      pushToast(
+        data.message ?? "OK",
+        data.status === "problem" ? "error" : "success",
+      );
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  async function fixPhoneIssue(issueId: string) {
+    setBusy(true);
+    try {
+      const res = await fetch("/api/phone-settings/fix", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ issueId, deviceSerial: selectedSerial || undefined }),
+      });
+      const data = await res.json();
+      pushToast(data.message ?? (data.ok ? "OK" : "Failed"), data.ok ? "success" : "error");
+      // Refresh detect state without nesting busy flags
+      if (data.ok) {
+        const det = await fetch("/api/phone-settings/detect", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ issueId, deviceSerial: selectedSerial || undefined }),
+        }).then((r) => r.json());
+        if (det.status) {
+          setPhoneDetectMap((m) => ({
+            ...m,
+            [issueId]: {
+              issueId,
+              status: det.status,
+              message: det.message ?? "",
+            },
+          }));
+        }
+      }
+    } catch (err) {
+      pushToast(err instanceof Error ? err.message : String(err), "error");
+    } finally {
+      setBusy(false);
     }
   }
 
@@ -843,6 +1035,7 @@ export function App() {
               manualSourceOptions={manualSourceOptions}
               vpnOpen={vpnOpen}
               vpnForm={vpnForm}
+              vpnLookupFound={vpnLookupFound}
               vpnResult={vpnResult}
               gmailOpen={gmailOpen}
               gmailForm={gmailForm}
@@ -862,6 +1055,7 @@ export function App() {
               onAddCatalogApp={() => void addCatalogApp()}
               onVpnOpen={setVpnOpen}
               onVpnForm={(patch) => setVpnForm((s) => ({ ...s, ...patch }))}
+              onLookupVpn={() => void lookupVpn()}
               onProvisionVpn={() => void provisionVpn()}
               onCopyVpnLink={() => void copyVpnLink()}
               onDeleteVpn={() => void deleteVpnAccount()}
@@ -869,6 +1063,15 @@ export function App() {
               onGmailForm={(patch) => setGmailForm((s) => ({ ...s, ...patch }))}
               onAssistGmail={() => void assistGmail()}
               onCopyGmailPassword={() => void copyGmailPassword()}
+              phoneSettingsOpen={phoneSettingsOpen}
+              phoneCategories={phoneCategories}
+              phoneIssues={phoneIssues}
+              phoneCategory={phoneCategory}
+              phoneDetectMap={phoneDetectMap}
+              onPhoneSettingsOpen={setPhoneSettingsOpen}
+              onPhoneCategory={setPhoneCategory}
+              onPhoneDetect={(id) => void detectPhoneIssue(id)}
+              onPhoneFix={(id) => void fixPhoneIssue(id)}
               onManualOpen={setManualOpen}
               onManualSource={setManualSource}
               onRunManual={() => void runManualInstall()}

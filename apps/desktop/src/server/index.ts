@@ -527,6 +527,42 @@ app.post("/api/backup/:jobId/:action", async (req, res) => {
   }
 });
 
+app.post("/api/vpn/lookup", async (req, res) => {
+  try {
+    const query = String(req.body?.query ?? req.body?.phone ?? req.body?.username ?? "").trim();
+    if (!query) {
+      res.status(400).json({ ok: false, message: "شماره تلفن یا شناسه لازم است" });
+      return;
+    }
+    const { createPasargadClient } = await import("@fixo/mcp-apps");
+    const client = createPasargadClient();
+    if (!client.hasCredentials) {
+      res.status(400).json({
+        ok: false,
+        message:
+          "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+      });
+      return;
+    }
+    const result = await client.searchUsers(query);
+    res.json(result);
+  } catch (err) {
+    const { PasargadError } = await import("@fixo/mcp-apps");
+    if (err instanceof PasargadError) {
+      res.status(err.statusCode && err.statusCode >= 400 ? err.statusCode : 500).json({
+        ok: false,
+        message: err.message,
+        detail: err.detail,
+      });
+      return;
+    }
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
 app.post("/api/vpn/provision", async (req, res) => {
   try {
     const days = Number(req.body?.days);
@@ -539,6 +575,15 @@ app.post("/api/vpn/provision", async (req, res) => {
       return;
     }
 
+    const phone =
+      typeof req.body?.phone === "string" ? req.body.phone.trim() : "";
+    const query =
+      typeof req.body?.query === "string"
+        ? req.body.query.trim()
+        : typeof req.body?.username === "string"
+          ? req.body.username.trim()
+          : "";
+
     const { createPasargadClient, pushConfigToV2Box } = await import("@fixo/mcp-apps");
     const client = createPasargadClient();
     if (!client.hasCredentials) {
@@ -550,8 +595,12 @@ app.post("/api/vpn/provision", async (req, res) => {
       return;
     }
 
-    // Username is auto-assigned as sequential numbers (1, 2, 3, …)
-    const account = await client.provision({ days, gigabytes });
+    const account = await client.provision({
+      days,
+      gigabytes,
+      phone: phone || undefined,
+      query: query || phone || undefined,
+    });
 
     let push: {
       ok: boolean;
@@ -600,6 +649,7 @@ app.post("/api/vpn/provision", async (req, res) => {
     res.json({
       ok: true,
       account,
+      summary: account.summary,
       push,
       message: push?.ok
         ? `${account.message} — ${push.message}`
@@ -641,7 +691,11 @@ app.post("/api/vpn/delete", async (req, res) => {
       });
       return;
     }
-    const existing = await client.lookupUser(username);
+    const existing =
+      (await client.lookupUser(username)) ??
+      (await client.searchUsers(username).then((r) =>
+        r.primary ? client.lookupUser(r.primary.username) : null,
+      ));
     if (!existing) {
       res.status(404).json({
         ok: false,
@@ -665,6 +719,77 @@ app.post("/api/vpn/delete", async (req, res) => {
       });
       return;
     }
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.get("/api/phone-settings/catalog", async (_req, res) => {
+  try {
+    const { listPhoneSettingsCatalog } = await import("@fixo/mcp-apps");
+    res.json({ ok: true, ...listPhoneSettingsCatalog() });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/phone-settings/detect", async (req, res) => {
+  try {
+    const issueId = String(req.body?.issueId ?? "").trim();
+    const detectKey = String(req.body?.detectKey ?? "").trim();
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { getIssueById, detectPhoneSetting } = await import("@fixo/mcp-apps");
+    const issue = issueId ? getIssueById(issueId) : undefined;
+    const key = detectKey || issue?.detectKey || "";
+    if (!key) {
+      res.status(400).json({ ok: false, message: "detectKey لازم است" });
+      return;
+    }
+    let serial: string | undefined;
+    try {
+      if (key !== "adb_connected") {
+        serial = (await resolveSerial(adb, serialParam)).serial;
+      }
+    } catch (err) {
+      res.status(400).json({
+        ok: false,
+        message: err instanceof Error ? err.message : String(err),
+      });
+      return;
+    }
+    const result = await detectPhoneSetting(adb, serial, key);
+    res.json({ ...result, issueId: issue?.id, ok: true });
+  } catch (err) {
+    res.status(500).json({
+      ok: false,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+});
+
+app.post("/api/phone-settings/fix", async (req, res) => {
+  try {
+    const issueId = String(req.body?.issueId ?? "").trim();
+    const fixKey = String(req.body?.fixKey ?? "").trim();
+    const serialParam =
+      typeof req.body?.deviceSerial === "string" ? req.body.deviceSerial : undefined;
+    const { getIssueById, fixPhoneSetting } = await import("@fixo/mcp-apps");
+    const issue = issueId ? getIssueById(issueId) : undefined;
+    const key = fixKey || issue?.fixKey || "";
+    if (!key) {
+      res.status(400).json({ ok: false, message: "fixKey لازم است" });
+      return;
+    }
+    const { serial } = await resolveSerial(adb, serialParam);
+    const result = await fixPhoneSetting(adb, serial, key);
+    res.status(result.ok ? 200 : 500).json({ ...result, issueId: issue?.id });
+  } catch (err) {
     res.status(500).json({
       ok: false,
       message: err instanceof Error ? err.message : String(err),

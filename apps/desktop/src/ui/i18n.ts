@@ -73,6 +73,19 @@ export type MessageKey =
   | "installing"
   | "vpnSection"
   | "vpnAssignedUser"
+  | "vpnLookupHint"
+  | "vpnQuery"
+  | "vpnLookup"
+  | "vpnPhoneOptional"
+  | "vpnNeedQuery"
+  | "vpnNotFoundCreate"
+  | "vpnCreateHint"
+  | "vpnQuota"
+  | "vpnRemaining"
+  | "vpnGb"
+  | "vpnDaysLeft"
+  | "vpnExpired"
+  | "vpnRenew"
   | "vpnDays"
   | "vpnGigabytes"
   | "vpnSuggest30"
@@ -101,6 +114,11 @@ export type MessageKey =
   | "gmailNoteSaved"
   | "gmailBusy"
   | "gmailNeedDevice"
+  | "phoneSettingsSection"
+  | "phoneSettingsHint"
+  | "phoneSettingsDetect"
+  | "phoneSettingsFix"
+  | "phoneSettingsEmpty"
   | "settingsTheme"
   | "settingsLanguage"
   | "voiceTalk"
@@ -181,6 +199,19 @@ const fa: Record<MessageKey, string> = {
   installing: "در حال نصب…",
   vpnSection: "VPN پاسارگاد",
   vpnAssignedUser: "نام‌کاربری",
+  vpnLookupHint: "شماره تلفن یا شناسه داخل پرانتز را بزن (مثلاً ۱۲)",
+  vpnQuery: "شماره / شناسه",
+  vpnLookup: "جستجوی اکانت",
+  vpnPhoneOptional: "شماره تلفن (اختیاری) → ۰۹۱۲…(شناسه)",
+  vpnNeedQuery: "شماره یا شناسه را وارد کن",
+  vpnNotFoundCreate: "اکانت پیدا نشد — می‌توانی بسازی",
+  vpnCreateHint: "برای ساخت جدید: شماره اختیاری + مدت و حجم",
+  vpnQuota: "حجم",
+  vpnRemaining: "مانده",
+  vpnGb: "گیگ",
+  vpnDaysLeft: "روز مانده",
+  vpnExpired: "منقضی",
+  vpnRenew: "تمدید / بازسازی + نصب روی گوشی",
   vpnDays: "مدت (روز)",
   vpnGigabytes: "حجم (گیگ)",
   vpnSuggest30: "یک ماه / ۳۰ گیگ",
@@ -210,6 +241,12 @@ const fa: Record<MessageKey, string> = {
   gmailNoteSaved: "یادداشت",
   gmailBusy: "در حال باز کردن صفحه ساخت جیمیل…",
   gmailNeedDevice: "اول گوشی را وصل کن",
+  phoneSettingsSection: "تنظیمات و عیب‌یابی گوشی",
+  phoneSettingsHint:
+    "دسته را انتخاب کن. تشخیص/رفع برای شبکه، USB و تاریخ فعال است؛ بقیه راهنمای دستی تعمیرکار است.",
+  phoneSettingsDetect: "تشخیص",
+  phoneSettingsFix: "رفع / باز کردن",
+  phoneSettingsEmpty: "موردی در این دسته نیست",
   settingsTheme: "تم ظاهر",
   settingsLanguage: "زبان",
   voiceTalk: "صحبت با ایجنت",
@@ -291,6 +328,19 @@ const en: Record<MessageKey, string> = {
   installing: "Installing…",
   vpnSection: "Pasargad VPN",
   vpnAssignedUser: "Username",
+  vpnLookupHint: "Enter phone or shop id in parentheses (e.g. 12)",
+  vpnQuery: "Phone / shop id",
+  vpnLookup: "Lookup account",
+  vpnPhoneOptional: "Phone (optional) → 0912…(id)",
+  vpnNeedQuery: "Enter a phone or shop id",
+  vpnNotFoundCreate: "No account found — you can create one",
+  vpnCreateHint: "To create: optional phone + days and gigabytes",
+  vpnQuota: "Quota",
+  vpnRemaining: "Left",
+  vpnGb: "GB",
+  vpnDaysLeft: "Days left",
+  vpnExpired: "Expired",
+  vpnRenew: "Renew / rebuild + push to phone",
   vpnDays: "Days",
   vpnGigabytes: "Gigabytes",
   vpnSuggest30: "1 month / 30 GB",
@@ -320,6 +370,12 @@ const en: Record<MessageKey, string> = {
   gmailNoteSaved: "Note",
   gmailBusy: "Opening Gmail signup…",
   gmailNeedDevice: "Connect a phone first",
+  phoneSettingsSection: "Phone settings & diagnostics",
+  phoneSettingsHint:
+    "Pick a category. Detect/fix works for network, USB, and date/time; others are technician guides.",
+  phoneSettingsDetect: "Detect",
+  phoneSettingsFix: "Fix / open",
+  phoneSettingsEmpty: "No items in this category",
   settingsTheme: "Appearance",
   settingsLanguage: "Language",
   voiceTalk: "Talk to agent",

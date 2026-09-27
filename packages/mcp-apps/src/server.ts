@@ -283,11 +283,53 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
   );
 
   server.tool(
+    "lookup_vpn",
+    "Lookup a Pasargad VPN account by phone or shop id; returns remaining GB and days.",
+    { query: z.string() },
+    async ({ query }) => {
+      try {
+        const { createPasargadClient } = await import("./pasargad.js");
+        const client = createPasargadClient();
+        if (!client.hasCredentials) {
+          return jsonResult(
+            {
+              status: "error",
+              message:
+                "PASARGAD_API_KEY در .env ست نشده است (یا PASARGAD_USERNAME/PASSWORD).",
+            },
+            false,
+          );
+        }
+        const result = await client.searchUsers(query);
+        return jsonResult(
+          {
+            status: result.found ? "ok" : "not_found",
+            message: result.message,
+            data: result,
+          },
+          result.ok,
+        );
+      } catch (err) {
+        const { PasargadError } = await import("./pasargad.js");
+        if (err instanceof PasargadError) {
+          return jsonResult(
+            { status: "error", message: err.message, detail: err.detail },
+            false,
+          );
+        }
+        return fail(err);
+      }
+    },
+  );
+
+  server.tool(
     "provision_vpn",
-    "Create a Pasargad VPN account and push the subscription into V2Box on the phone. Only days and gigabytes are required; username is auto-assigned as sequential numbers (1, 2, 3, …).",
+    "Create or renew a Pasargad VPN account. days + gigabytes required; optional phone builds 0912...(id). Optional query looks up existing first.",
     {
       days: z.number().positive(),
       gigabytes: z.number().positive(),
+      phone: z.string().optional(),
+      query: z.string().optional(),
       deviceSerial: z.string().optional(),
       pushToDevice: z.boolean().optional(),
     },
@@ -313,6 +355,8 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
         const account = await client.provision({
           days: args.days,
           gigabytes: args.gigabytes,
+          phone: args.phone,
+          query: args.query || args.phone,
         });
         let push = null;
         if (args.pushToDevice !== false) {
@@ -344,7 +388,7 @@ export function createAppsMcpServer(adb: AdbRunner = createSystemAdb()) {
 
   server.tool(
     "delete_vpn",
-    "Permanently delete a Pasargad VPN account by numeric username.",
+    "Permanently delete a Pasargad VPN account by username or shop id.",
     { username: z.string() },
     async ({ username }) => {
       try {
