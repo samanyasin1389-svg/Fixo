@@ -12,7 +12,7 @@
 گیت‌هاب:
 github.com/yasinfallahati/Fixo
 
-نبض فردا رو دنبال کن 👈 @nabz_farda
+نبض فردا رو دنبال کن → @nabz_farda
 
 ---
 
