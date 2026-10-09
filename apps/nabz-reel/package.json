@@ -1,0 +1,25 @@
+{
+  "name": "@fixo/nabz-reel",
+  "version": "1.0.0",
+  "private": true,
+  "description": "نبض فردا — ریل عمودی درباره هوش مصنوعی روزمره با دموی واقعی Fixo",
+  "scripts": {
+    "studio": "remotion studio src/index.ts",
+    "render": "remotion render src/index.ts NabzFardaReel out/nabz-farda-ai-daily.mp4 --codec=h264 --video-bitrate=10M --audio-bitrate=192k --audio-codec=aac --pixel-format=yuv420p",
+    "cover": "remotion still src/index.ts NabzFardaReel out/cover.png --frame=24",
+    "audio": "node scripts/make-audio.mjs",
+    "build:reel": "node scripts/make-audio.mjs && remotion render src/index.ts NabzFardaReel out/nabz-farda-ai-daily.mp4 --codec=h264 --video-bitrate=10M --audio-bitrate=192k --audio-codec=aac --pixel-format=yuv420p && remotion still src/index.ts NabzFardaReel out/cover.png --frame=24"
+  },
+  "dependencies": {
+    "@remotion/cli": "^4.0.534",
+    "@remotion/renderer": "^4.0.534",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "remotion": "^4.0.534"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "typescript": "^5.8.2"
+  }
+}
