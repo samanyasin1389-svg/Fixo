@@ -110,7 +110,7 @@ const DemoCopy: React.FC = () => {
         />
         <div style={{ height: 10 }} />
         <MaskedWords
-          text="وصل · وای‌فای · نصب · بک‌آپ"
+          text="وصل، وای‌فای، نصب، بک‌آپ"
           startSec={Acts.demo.start + 0.85}
           fontSize={22}
           fontWeight={600}
@@ -124,19 +124,19 @@ const DemoCopy: React.FC = () => {
 const NumbersCopy: React.FC = () => {
   const frame = useCurrentFrame();
   const t = frame / FPS - Acts.numbers.start;
-  const opacity = interpolate(t, [0.9, 1.2, 3.4, 3.8], [0, 1, 1, 0], {
+  const opacity = interpolate(t, [0.85, 1.15, 3.4, 3.85], [0, 1, 1, 0], {
     extrapolateLeft: "clamp",
     extrapolateRight: "clamp",
   });
 
   return (
-    <SafeOverlay top={1180}>
+    <SafeOverlay top={260}>
       <div style={{ opacity, textAlign: "center" }}>
-        <Kicker text="NOT A CHATBOT" startSec={Acts.numbers.start + 1} align="center" />
+        <Kicker text="NOT A CHATBOT" startSec={Acts.numbers.start + 0.9} align="center" />
         <div style={{ display: "flex", justifyContent: "center" }}>
           <MaskedWords
-            text="۷ قابلیت واقعی · یک میزکار"
-            startSec={Acts.numbers.start + 1.15}
+            text="۷ قابلیت واقعی، یک میزکار"
+            startSec={Acts.numbers.start + 1.05}
             fontSize={32}
             fontWeight={800}
             align="center"
@@ -153,7 +153,7 @@ const NumbersCopy: React.FC = () => {
             direction: "rtl",
           }}
         >
-          منبع: README رسمی Fixo · بخش قابلیت‌ها
+          منبع: README رسمی Fixo — بخش قابلیت‌ها
         </div>
       </div>
     </SafeOverlay>

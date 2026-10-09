@@ -422,7 +422,7 @@ const StatsScreen: React.FC<{ t: number }> = ({ t }) => {
           }),
         }}
       >
-        منبع: README فیکسو · ۷ بخش قابلیت
+        منبع: README فیکسو — ۷ بخش قابلیت
       </div>
     </div>
   );
@@ -713,11 +713,11 @@ export const HeroPhone: React.FC<Props> = ({
 
   const modeScale =
     mode === "stats"
-      ? interpolate(dive, [0, 1], [1, 1.55], { easing: ease.inCubic })
+      ? interpolate(dive, [0, 1], [1, 1.32], { easing: ease.inCubic })
       : mode === "card"
-        ? 1.05
+        ? 1.02
         : mode === "follow"
-          ? 1.08
+          ? 1.04
           : 1;
 
   const blurFast = mode === "stats" && dive > 0.2 && dive < 0.85 ? 1.8 : 0;
@@ -740,7 +740,7 @@ export const HeroPhone: React.FC<Props> = ({
         style={{
           position: "absolute",
           left: "50%",
-          top: mode === "chaos" || mode === "demo" ? 520 : 480,
+          top: mode === "chaos" || mode === "demo" ? 980 : mode === "stats" ? 720 : 900,
           width: 360,
           height: 720,
           transform: `
